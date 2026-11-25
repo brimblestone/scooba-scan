@@ -56,3 +56,14 @@ and more speed fields in Copy log. Not yet measured on the phone.
   It also reads vendor Data Matrix / QR codes (Merck/Sigma GS1, Fisher URL) and older 6-digit lab labels.
 - Build v0.3.0 uses zxing-wasm for barcodes. Barcode decoding ran at ~17 fps in the laptop browser test.
 - Next: look tags up in the lab's own inventory export so a tag read gives the CAS/name instantly.
+
+## Lab inventory lookup (build v0.4.0)
+The lab's chemical-container export (5,951 containers, 99% with a CAS) keys containers by `Container ID`, which is the
+same 10-digit number as the Code 128 barcode tag. Checked against the tags decoded from the test photos: 8 of 11 tags
+are in the export, and for all 6 where the label prints a CAS it agrees with the inventory CAS. Not found: two tags in the
+0000047xxx range (likely added after the export date) and one low-numbered tag.
+- `src/csv.js` + `src/inventory.js`: CSV parsing and lookup by tag (leading zeros ignored, so 10-digit barcodes,
+  11-digit ids and old 6-digit labels all match) and by CAS. 9 tag numbers are shared by more than one container
+  once zeros are ignored; the page flags those as ambiguous.
+- The page loads the CSV on the phone ("Load inventory CSV"), keeps it in the browser's IndexedDB, and never uploads it.
+  A tag read now shows name, CAS, location and amount; a CAS read shows how many containers hold it and where.

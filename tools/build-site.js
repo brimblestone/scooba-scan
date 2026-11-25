@@ -13,6 +13,8 @@ const copy = (from, to) => {
 const core = 'node_modules/tesseract.js-core/';
 copy('web/index.html', 'index.html');
 copy('src/cas.js', 'src/cas.js');
+copy('src/csv.js', 'src/csv.js');
+copy('src/inventory.js', 'src/inventory.js');
 copy('node_modules/zxing-wasm/dist/iife/reader/index.js', 'vendor/zxing-wasm/iife/reader/index.js');
 copy('node_modules/zxing-wasm/dist/reader/zxing_reader.wasm', 'vendor/zxing-wasm/reader/zxing_reader.wasm');
 copy('node_modules/tesseract.js/dist/tesseract.min.js', 'vendor/tesseract/tesseract.min.js');

@@ -13,6 +13,11 @@ Everything runs on your device. The camera feed is processed in the browser by
 [ZXing](https://github.com/zxing-js/library) (barcodes) and [Tesseract.js](https://github.com/naptha/tesseract.js) (text).
 Nothing is uploaded and there is no backend or analytics.
 
+## Lab inventory
+Tap **Load inventory CSV** and choose your lab's chemical-container export. It is read on the phone and kept in the
+browser's local storage. It is never uploaded and is not part of this repository (CSV files are git-ignored).
+Scanning a tag then shows the container's name, CAS and location.
+
 ## Giving feedback during testing
 Tap **Copy log** on the page and paste it into your report, along with your phone model and the build
 shown at the bottom of the page. Please do **not** share photos of labels that show institution tags.
