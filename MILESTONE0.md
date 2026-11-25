@@ -67,3 +67,9 @@ are in the export, and for all 6 where the label prints a CAS it agrees with the
   once zeros are ignored; the page flags those as ambiguous.
 - The page loads the CSV on the phone ("Load inventory CSV"), keeps it in the browser's IndexedDB, and never uploads it.
   A tag read now shows name, CAS, location and amount; a CAS read shows how many containers hold it and where.
+
+## Full-screen layout (build v0.5.0)
+Camera fills the screen; barcodes are read from the whole frame. The latest reads show large in a bottom sheet with
+inventory details; settings sit behind a gear. The CAS text reader is a whole-frame backup by default (no box, no zoom,
+since zooming a whole frame was ~4x slower); the box is now an optional setting. Added a web manifest, app icons and
+iOS meta tags so "Add to Home Screen" launches without browser toolbars.

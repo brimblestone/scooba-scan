@@ -12,6 +12,8 @@ const copy = (from, to) => {
 };
 const core = 'node_modules/tesseract.js-core/';
 copy('web/index.html', 'index.html');
+copy('web/manifest.webmanifest', 'manifest.webmanifest');
+for (const i of ['icon-180.png', 'icon-192.png', 'icon-512.png']) copy('web/' + i, i);
 copy('src/cas.js', 'src/cas.js');
 copy('src/csv.js', 'src/csv.js');
 copy('src/inventory.js', 'src/inventory.js');

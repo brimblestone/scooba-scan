@@ -3,41 +3,73 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Scooba Scan — scanner spike</title>
+<meta name="theme-color" content="#0b0f14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scooba Scan">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Scooba Scan</title>
 <style>
-  :root { --bg:#0b0f14; --panel:#121923; --line:#243142; --text:#e8eef6; --dim:#8a9bb0; --ok:#3ddc97; --warn:#ffb454; --bar:#58a6ff; }
+  :root { --bg:#0b0f14; --panel:#121923; --line:#243142; --text:#e8eef6; --dim:#8a9bb0; --ok:#3ddc97; --warn:#ffb454; --bar:#58a6ff;
+          --top:env(safe-area-inset-top, 0px); --bottom:env(safe-area-inset-bottom, 0px); }
   * { box-sizing: border-box; }
-  html, body { margin:0; background:var(--bg); color:var(--text); font:14px/1.35 -apple-system, system-ui, sans-serif; }
-  body { min-height:100dvh; display:flex; flex-direction:column; padding-bottom:env(safe-area-inset-bottom); }
-  #stage { position:relative; width:100%; background:#000; aspect-ratio:3/4; max-height:55dvh; overflow:hidden; }
-  video { width:100%; height:100%; object-fit:cover; display:block; }
-  #hud { position:absolute; left:8px; top:8px; right:8px; display:flex; gap:6px; flex-wrap:wrap; pointer-events:none; }
-  .chip { background:rgba(11,15,20,.78); border:1px solid var(--line); border-radius:8px; padding:3px 8px; font-variant-numeric:tabular-nums; }
-  .chip b { color:var(--bar); font-weight:600; }
-  #reticle { position:absolute; left:4%; right:4%; top:32%; height:34%; border:2px dashed rgba(255,255,255,.85); border-radius:10px; box-shadow:0 0 0 9999px rgba(0,0,0,.35); pointer-events:none; }
-  #reticle span { position:absolute; left:8px; bottom:-26px; font-size:12px; color:#fff; text-shadow:0 1px 3px #000; }
-  #flash { position:absolute; inset:0; border:4px solid var(--ok); opacity:0; transition:opacity .5s; pointer-events:none; }
+  html, body { margin:0; height:100%; overflow:hidden; background:#000; color:var(--text); font:14px/1.35 -apple-system, system-ui, sans-serif; overscroll-behavior:none; }
+
+  /* The camera fills the whole screen. */
+  #stage { position:fixed; inset:0; background:#000; }
+  video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+  #flash { position:absolute; inset:0; border:5px solid var(--ok); opacity:0; transition:opacity .5s; pointer-events:none; }
   #flash.on { opacity:1; transition:none; }
-  #start { position:absolute; inset:0; margin:auto; width:200px; height:56px; font-size:17px; font-weight:600; border:0; border-radius:12px; background:var(--bar); color:#04111f; }
-  main { padding:10px 12px; display:grid; gap:10px; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  label { color:var(--dim); font-size:12px; display:grid; gap:2px; }
-  select, button.sm { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font-size:14px; }
-  label.chk { display:flex; align-items:center; gap:6px; color:var(--text); font-size:14px; }
-  h2 { margin:0; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
-  #dets { list-style:none; margin:6px 0 0; padding:0; display:grid; gap:6px; }
-  #dets li { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; display:grid; grid-template-columns:auto 1fr auto; gap:2px 10px; align-items:baseline; }
+
+  /* Optional box that limits OCR to one region (off by default; barcodes always use the whole frame). */
+  #reticle { display:none; position:absolute; left:4%; right:4%; top:30%; height:30%; border:2px dashed rgba(255,255,255,.85); border-radius:10px; box-shadow:0 0 0 9999px rgba(0,0,0,.35); pointer-events:none; }
+  #stage.crop #reticle { display:block; }
+  #reticle span { position:absolute; left:8px; bottom:-26px; font-size:12px; color:#fff; text-shadow:0 1px 3px #000; }
+
+  /* Top bar: live stats + settings button */
+  #top { position:absolute; left:8px; right:8px; top:calc(var(--top) + 8px); display:flex; gap:6px; align-items:flex-start; }
+  #hud { flex:1; display:flex; gap:6px; flex-wrap:wrap; pointer-events:none; }
+  .chip { background:rgba(11,15,20,.72); border:1px solid var(--line); border-radius:8px; padding:3px 8px; font-size:12px; font-variant-numeric:tabular-nums; backdrop-filter:blur(6px); }
+  .chip b { color:var(--bar); font-weight:600; }
+  #gear { flex:none; width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:rgba(11,15,20,.72); color:var(--text); font-size:20px; backdrop-filter:blur(6px); }
+
+  #start { position:absolute; inset:0; margin:auto; width:220px; height:60px; font-size:18px; font-weight:600; border:0; border-radius:14px; background:var(--bar); color:#04111f; }
+
+  /* Bottom sheet: the latest reads, big. Tap the header to see more. */
+  #sheet { position:absolute; left:0; right:0; bottom:0; max-height:36dvh; display:flex; flex-direction:column; background:rgba(11,15,20,.88); border-top:1px solid var(--line); border-radius:18px 18px 0 0; backdrop-filter:blur(10px); padding-bottom:var(--bottom); transition:max-height .2s; }
+  #sheet.open { max-height:78dvh; }
+  #sheetHead { display:flex; align-items:center; gap:10px; padding:10px 14px 6px; cursor:pointer; user-select:none; }
+  #sheetHead::before { content:""; position:absolute; left:50%; top:6px; width:40px; height:4px; margin-left:-20px; border-radius:2px; background:var(--line); }
+  #status { flex:1; color:var(--dim); font-size:12px; min-height:1.4em; }
+  #count { color:var(--dim); font-size:12px; }
+  #list { overflow-y:auto; padding:0 12px 12px; -webkit-overflow-scrolling:touch; }
+  #dets { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+  #dets li { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px; display:grid; grid-template-columns:auto 1fr auto; gap:3px 10px; align-items:baseline; }
+  #dets li:first-child { border-color:var(--ok); }
   #dets .kind { font-size:11px; border-radius:4px; padding:1px 6px; color:#04111f; font-weight:600; }
   .k-bar { background:var(--bar); } .k-cas { background:var(--ok); } .k-fz { background:var(--warn); }
   #dets .val { font:600 16px ui-monospace, Menlo, monospace; }
   #dets .meta { color:var(--dim); font-size:12px; text-align:right; }
-  #dets .info { grid-column:1/-1; font-size:13px; line-height:1.3; word-break:break-word; }
-  #dets .info small { color:var(--dim); display:block; }
+  #dets .info { grid-column:1/-1; font-size:14px; line-height:1.3; word-break:break-word; }
+  #dets li:first-child .info > span { font-size:19px; font-weight:600; line-height:1.25; display:block; }
+  #dets .info small { color:var(--dim); display:block; font-size:13px; }
   #dets .info.unk { color:var(--warn); }
-  .filebtn { cursor:pointer; display:inline-block; }
+  #empty { color:var(--dim); padding:4px 2px 10px; }
+
+  /* Settings panel (hidden until the gear is tapped) */
+  #panel { position:absolute; inset:0; display:none; flex-direction:column; gap:12px; padding:calc(var(--top) + 14px) 16px calc(var(--bottom) + 16px); background:rgba(11,15,20,.96); overflow-y:auto; }
+  #panel.open { display:flex; }
+  #panel h2 { margin:0; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  label { color:var(--dim); font-size:12px; display:grid; gap:2px; }
+  select, button.sm { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px; font-size:14px; }
+  label.chk { display:flex; align-items:center; gap:8px; color:var(--text); font-size:15px; }
+  .filebtn { cursor:pointer; display:inline-block; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; color:var(--text); font-size:14px; }
   .filebtn input { display:none; }
-  #empty { color:var(--dim); }
-  #status { color:var(--dim); font-size:12px; min-height:1.4em; }
+  #closePanel { align-self:flex-end; }
+  #build { color:var(--dim); font-size:11px; margin-top:auto; }
 </style>
 </head>
 <body>
@@ -45,44 +77,57 @@
   <video id="video" playsinline muted autoplay></video>
   <div id="reticle"><span>Line the CAS number up inside the box</span></div>
   <div id="flash"></div>
-  <div id="hud">
-    <span class="chip">cam <b id="s-cam">–</b></span>
-    <span class="chip">barcode <b id="s-bfps">–</b> fps</span>
-    <span class="chip">OCR <b id="s-oms">–</b> ms · <b id="s-ofps">–</b> fps</span>
-    <span class="chip">skipped <b id="s-skip">0</b></span>
-    <span class="chip">inventory <b id="s-inv">none</b></span>
+  <div id="top">
+    <div id="hud">
+      <span class="chip">barcode <b id="s-bfps">–</b> fps</span>
+      <span class="chip">OCR <b id="s-oms">–</b> ms</span>
+      <span class="chip">inventory <b id="s-inv">none</b></span>
+      <span class="chip" hidden>cam <b id="s-cam">–</b> · <b id="s-ofps">–</b> OCR fps · skipped <b id="s-skip">0</b></span>
+    </div>
+    <button id="gear" aria-label="Settings">⚙︎</button>
   </div>
   <button id="start">Start camera</button>
+
+  <div id="sheet">
+    <div id="sheetHead"><span id="status">Idle. Tap “Start camera”.</span><span id="count"></span></div>
+    <div id="list">
+      <ul id="dets"></ul>
+      <div id="empty">Nothing yet. Point the camera at a bottle's barcode tag or label.</div>
+    </div>
+  </div>
+
+  <div id="panel">
+    <button class="sm" id="closePanel">Done</button>
+    <h2>Scanning</h2>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="useBar" checked> Barcode (whole frame)</label>
+      <label class="chk"><input type="checkbox" id="useOcr" checked> CAS text reader (backup)</label>
+      <label class="chk"><input type="checkbox" id="useCrop"> Read CAS only inside a box</label>
+      <label class="chk"><input type="checkbox" id="useBlur" checked> Skip blurry frames</label>
+    </div>
+    <h2>Lab inventory</h2>
+    <div class="row">
+      <label class="filebtn">Load inventory CSV<input type="file" id="invFile" accept=".csv,text/csv,text/plain"></label>
+      <button class="sm" id="invClear">Clear inventory</button>
+    </div>
+    <h2>Tuning</h2>
+    <div class="row">
+      <label>Camera
+        <select id="camRes"><option value="1280x720">720p</option><option value="1920x1080" selected>1080p</option><option value="3840x2160">4K</option></select></label>
+      <label>CAS reader zoom
+        <select id="ocrScale"><option value="1">×1</option><option value="1.5" selected>×1.5</option><option value="2">×2</option></select></label>
+      <label>CAS reader workers
+        <select id="workers"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+      <label>CAS reader mode
+        <select id="psm"><option value="11" selected>sparse (11)</option><option value="6">block (6)</option><option value="3">auto (3)</option></select></label>
+    </div>
+    <div class="row">
+      <button class="sm" id="reset">Reset list</button>
+      <button class="sm" id="copy">Copy log</button>
+    </div>
+    <div id="build" data-build="v0.5.0 2026-11-25 03:25Z">Scooba Scan prototype</div>
+  </div>
 </div>
-<main>
-  <div class="row">
-    <label>Camera
-      <select id="camRes"><option value="1280x720">720p</option><option value="1920x1080" selected>1080p</option><option value="3840x2160">4K</option></select></label>
-    <label>OCR zoom
-      <select id="ocrScale"><option value="1">×1</option><option value="1.5" selected>×1.5</option><option value="2">×2</option></select></label>
-    <label>OCR workers
-      <select id="workers"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
-    <label>OCR mode
-      <select id="psm"><option value="11" selected>sparse (11)</option><option value="6">block (6)</option><option value="3">auto (3)</option></select></label>
-  </div>
-  <div class="row">
-    <label class="chk"><input type="checkbox" id="useBar" checked> Barcode</label>
-    <label class="chk"><input type="checkbox" id="useOcr" checked> OCR</label>
-    <label class="chk"><input type="checkbox" id="useCrop" checked> Box only</label>
-    <label class="chk"><input type="checkbox" id="useBlur" checked> Skip blurry</label>
-    <label class="sm filebtn">Load inventory CSV<input type="file" id="invFile" accept=".csv,text/csv,text/plain"></label>
-    <button class="sm" id="invClear">Clear inventory</button>
-    <button class="sm" id="reset">Reset list</button>
-    <button class="sm" id="copy">Copy log</button>
-  </div>
-  <div id="status">Idle. Tap “Start camera”. Worker count applies at start.</div>
-  <section>
-    <h2>Detections</h2>
-    <ul id="dets"></ul>
-    <div id="empty">Nothing yet. Point at a bottle label or barcode tag.</div>
-  </section>
-  <footer id="build" data-build="v0.4.0 2026-11-25 03:14Z" style="color:var(--dim);font-size:11px">Scooba Scan prototype</footer>
-</main>
 
 <script src="./vendor/zxing-wasm/iife/reader/index.js"></script>
 <script src="./vendor/tesseract/tesseract.min.js"></script>
@@ -249,7 +294,8 @@ async function ocrLane(worker, canvas) {
     const s = sharpness(video, rect.x, rect.y, rect.w, rect.h);
     if (tooBlurry(s)) { skipped++; await new Promise((r) => setTimeout(r, 30)); continue; }
     if ($('psm').value !== lastPsm) { lastPsm = $('psm').value; await worker.setParameters({ tessedit_pageseg_mode: lastPsm }); }
-    const zoom = Number($('ocrScale').value);
+    // Zoom only pays off on a small box; enlarging a whole frame is slow, so the full frame is read at native size.
+    const zoom = $('useCrop').checked ? Number($('ocrScale').value) : 1;
     const outW = Math.min(2600, Math.round(rect.w * zoom));
     canvas.width = outW; canvas.height = Math.round(outW * rect.h / rect.w);
     ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h, 0, 0, canvas.width, canvas.height);
@@ -268,19 +314,30 @@ function record(kind, value, sub, ms) {
   const key = `${kind}:${value}`;
   const now = Math.round(performance.now() - t0);
   const d = detections.get(key);
-  if (d) { d.count++; d.lastMs = now; if (kind === 'cas' && sub === 'exact') d.tier = 'exact'; }
+  if (d) { d.count++; d.lastMs = now; if (kind === 'cas' && sub === 'exact') d.tier = 'exact'; scheduleRender(); }
   else {
     detections.set(key, { kind, value, tier: sub, count: 1, firstMs: now, lastMs: now });
     $('flash').classList.add('on'); setTimeout(() => $('flash').classList.remove('on'), 80);
     if (navigator.vibrate) navigator.vibrate(60);
+    $('list').scrollTop = 0;
+    render(); // a new bottle: show it immediately
   }
-  render();
+}
+
+// Repeat reads of the same bottle only bump a counter, so redraw at most ~8 times a second.
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  setTimeout(() => { renderQueued = false; render(); }, 120);
 }
 
 function render() {
   const ul = $('dets'); ul.textContent = '';
-  const items = [...detections.values()].sort((a, b) => b.lastMs - a.lastMs);
+  // Newest *new* bottle first, so the list does not reshuffle while the same bottle keeps being read.
+  const items = [...detections.values()].sort((a, b) => b.firstMs - a.firstMs);
   $('empty').style.display = items.length ? 'none' : '';
+  $('count').textContent = items.length ? items.length + ' read' : '';
   for (const d of items) {
     const li = document.createElement('li');
     const kind = document.createElement('span');
@@ -338,7 +395,7 @@ $('start').addEventListener('click', async () => {
     }
     $('start').style.display = 'none';
     running = true; t0 = performance.now();
-    status('Scanning. Put the CAS number inside the box, 15–30 cm away.');
+    status('Scanning. Hold a bottle in view, tag or label facing the camera.');
     barcodeLoop();
     workers.forEach((w) => ocrLane(w, document.createElement('canvas')));
   } catch (e) {
@@ -362,6 +419,15 @@ $('copy').addEventListener('click', async () => {
     detections: [...detections.values()].map((d) => { const i = describe(d); return { ...d, inInventory: i ? !i.unknown : null }; }), ocrFrames: log.slice(-60) }, null, 1);
   try { await navigator.clipboard.writeText(text); status('Log copied.'); } catch { status('Copy blocked by browser.'); }
 });
+// ---- screen controls ----------------------------------------------------------
+$('gear').addEventListener('click', () => $('panel').classList.add('open'));
+$('closePanel').addEventListener('click', () => $('panel').classList.remove('open'));
+$('sheetHead').addEventListener('click', () => $('sheet').classList.toggle('open'));
+const syncCrop = () => $('stage').classList.toggle('crop', $('useCrop').checked);
+$('useCrop').addEventListener('change', syncCrop); syncCrop();
+// Keep the camera running when the phone is rotated or the browser bars slide away.
+addEventListener('resize', () => { if (running && video.paused) video.play().catch(() => {}); });
+
 restoreInventory().then(() => render());
 render();
 </script>

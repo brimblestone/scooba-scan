@@ -13,6 +13,11 @@ Everything runs on your device. The camera feed is processed in the browser by
 [ZXing](https://github.com/zxing-js/library) (barcodes) and [Tesseract.js](https://github.com/naptha/tesseract.js) (text).
 Nothing is uploaded and there is no backend or analytics.
 
+## Full-screen on your phone
+The camera fills the screen and the latest reads appear in a sheet at the bottom (tap its header to see more;
+the gear opens settings). For a true full-screen view with no browser toolbars, open the page in Safari and choose
+**Share → Add to Home Screen**, then launch it from the new icon.
+
 ## Lab inventory
 Tap **Load inventory CSV** and choose your lab's chemical-container export. It is read on the phone and kept in the
 browser's local storage. It is never uploaded and is not part of this repository (CSV files are git-ignored).
