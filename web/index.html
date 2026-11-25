@@ -99,7 +99,16 @@
   #found .row { margin-top:8px; }
   #found button { background:var(--ok); color:#04111f; border:0; border-radius:10px; padding:11px 16px; font-size:15px; font-weight:700; }
   #found button.alt { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:600; }
-  #stage.found #flash { opacity:1; transition:none; }
+  #stage.found #flash { opacity:1; transition:none; animation:glow 0.9s ease-in-out infinite alternate; }
+  #confetti { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #found.show { animation:pop .45s cubic-bezier(.2,1.4,.4,1) both; }
+  #found.show .big { animation:wiggle 1.2s ease-in-out .3s 2; }
+  @keyframes pop { from { transform:scale(.55); opacity:0; } to { transform:scale(1); opacity:1; } }
+  @keyframes glow { from { box-shadow:inset 0 0 18px rgba(61,220,151,.35); } to { box-shadow:inset 0 0 70px rgba(61,220,151,.9); } }
+  @keyframes wiggle { 0%,100% { transform:rotate(0) scale(1); } 25% { transform:rotate(-3deg) scale(1.08); } 75% { transform:rotate(3deg) scale(1.08); } }
+  @media (prefers-reduced-motion: reduce) {
+    #found.show, #found.show .big, #stage.found #flash { animation:none; }
+  }
 </style>
 </head>
 <body>
@@ -119,8 +128,10 @@
   <button id="findBtn" type="button"><span class="ico">🔍</span><span id="findLabel">Find a chemical — name or CAS</span></button>
   <button id="start">Start camera</button>
 
+  <canvas id="confetti"></canvas>
+
   <div id="found">
-    <div class="big">✓ FOUND</div>
+    <div class="big">🎉 FOUND!</div>
     <div class="nm" id="foundName"></div>
     <div class="wh" id="foundWhere"></div>
     <div class="ot" id="foundOthers"></div>
@@ -478,23 +489,66 @@ let seenTags = new Set(); // tags already found for this target, skipped after "
 let casQuietUntil = 0;    // after a find by CAS text, ignore further CAS-text matches for a few seconds
 let actx = null;
 const unlockAudio = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch {} };
-function beep() {
+// A short rising fanfare (C-E-G-C) played with Web Audio; the last note rings out.
+function fanfare() {
   try {
     unlockAudio();
-    [880, 1320].forEach((f, i) => {
-      const o = actx.createOscillator(), g = actx.createGain();
-      o.frequency.value = f; o.connect(g); g.connect(actx.destination);
-      const t = actx.currentTime + i * 0.15;
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-      o.start(t); o.stop(t + 0.15);
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i, a) => {
+      const last = i === a.length - 1, o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'triangle'; o.frequency.value = f; o.connect(g); g.connect(actx.destination);
+      const t = actx.currentTime + i * 0.11, len = last ? 0.6 : 0.16;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      o.start(t); o.stop(t + len + 0.02);
     });
   } catch {}
+}
+
+// Confetti burst on a canvas over the camera (skipped if the phone asks for reduced motion).
+let celebrating = false;
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv = $('confetti'), ctx = cv.getContext('2d'), dpr = Math.min(2, devicePixelRatio || 1);
+  cv.width = Math.round(cv.clientWidth * dpr); cv.height = Math.round(cv.clientHeight * dpr);
+  const W = cv.width, H = cv.height, colors = ['#3ddc97', '#58a6ff', '#ffb454', '#ff6b9d', '#ffe66d', '#b388ff'];
+  const bits = Array.from({ length: 150 }, () => ({
+    x: W * 0.5 + (Math.random() - 0.5) * W * 0.3, y: H * 0.3,
+    vx: (Math.random() - 0.5) * 15 * dpr, vy: (-6 - Math.random() * 11) * dpr, g: (0.28 + Math.random() * 0.16) * dpr,
+    s: (6 + Math.random() * 8) * dpr, a: Math.random() * 6.28, spin: (Math.random() - 0.5) * 0.4, c: colors[(Math.random() * colors.length) | 0],
+  }));
+  const start = performance.now(), LIFE = 3500;
+  (function frame(now) {
+    const t = now - start;
+    ctx.clearRect(0, 0, W, H);
+    if (!celebrating || t > LIFE) return;
+    for (const p of bits) {
+      p.vy += p.g; p.vx *= 0.992; p.x += p.vx; p.y += p.vy; p.a += p.spin;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0, 1 - t / LIFE);
+      ctx.fillRect(-p.s / 2, -p.s / 3, p.s, p.s * 0.6); ctx.restore();
+    }
+    requestAnimationFrame(frame);
+  })(start);
+}
+
+// Found it: freeze the camera on the bottle, play the fanfare, vibrate (not on iPhone), and throw confetti.
+function celebrate() {
+  celebrating = true;
+  video.pause();
+  fanfare();
+  if (navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 240]);
+  confetti();
+}
+function endCelebration() {
+  celebrating = false;
+  const cv = $('confetti'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  if (running) video.play().catch(() => {}); // un-freeze the camera
 }
 const whereOf = (cs, n = 3) => [...new Set(cs.map((c) => c.where).filter(Boolean))].slice(0, n).join(' | ');
 const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
 
 function setTarget(t) {
   target = t; scanPaused = false; seenTags = new Set(); casQuietUntil = 0;
+  endCelebration();
+  if (!running) $('start').textContent = t ? 'Start scanning' : 'Start camera';
   detections.clear(); render();
   $('stage').classList.remove('found'); $('found').classList.remove('show');
   $('findBtn').classList.toggle('on', !!t);
@@ -528,7 +582,7 @@ function onFound(m, kind, value) {
   if (scanPaused) return;
   scanPaused = true;
   if (kind === 'barcode') seenTags.add(normTag(value)); else casQuietUntil = performance.now() + 5000;
-  beep(); if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  celebrate();
   const c = m.container;
   $('foundName').textContent = c ? c.name : target.label;
   $('foundWhere').textContent = c ? [c.id, c.where, c.amount].filter(Boolean).join(' · ')
@@ -590,6 +644,7 @@ $('findInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { con
 $('tgtClear').addEventListener('click', () => setTarget(null));
 $('doneFind').addEventListener('click', () => setTarget(null));
 $('keepLooking').addEventListener('click', () => {
+  endCelebration();
   scanPaused = false; $('found').classList.remove('show'); $('stage').classList.remove('found');
   status('Scanning for ' + target.label + '…');
 });
@@ -601,7 +656,7 @@ $('sheetHead').addEventListener('click', () => $('sheet').classList.toggle('open
 const syncCrop = () => $('stage').classList.toggle('crop', $('useCrop').checked);
 $('useCrop').addEventListener('change', syncCrop); syncCrop();
 // Keep the camera running when the phone is rotated or the browser bars slide away.
-addEventListener('resize', () => { if (running && video.paused) video.play().catch(() => {}); });
+addEventListener('resize', () => { if (running && video.paused && !scanPaused) video.play().catch(() => {}); });
 
 restoreInventory().then(() => render());
 render();

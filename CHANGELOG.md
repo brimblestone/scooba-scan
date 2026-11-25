@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 — 2026-11-25
+Celebration when Find reaches its goal.
+- Enter the CAS you are looking for first; the start button then reads "Start scanning". Scan shelves; the moment a
+  matching bottle is read, scanning stops and the camera freezes on it.
+- Confetti burst, a pop-in "🎉 FOUND!" banner, a pulsing green glow and a short rising fanfare (plus a vibration
+  on phones that allow it; iPhone does not). Reduced-motion phones skip the confetti and animations.
+- "Keep looking" un-freezes the camera and resumes (skipping bottles already found); "Done" ends the search.
+
 ## 1.1.1 — 2026-11-25
 Find mode fixes from phone testing.
 - The tiny 🔍 icon is replaced by a full-width "Find a chemical — name or CAS" search bar under the stats. While you

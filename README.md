@@ -3,7 +3,7 @@
 A phone-camera web app for scanning chemical bottles hands-free. It identifies a bottle by its
 **institution barcode tag** or by the **CAS number** printed on the label.
 
-**Version 1.1.0.** Point the camera at a bottle: its tag is read in a fraction of a second and
+**Version 1.2.0.** Point the camera at a bottle: its tag is read in a fraction of a second and
 looked up in your lab's inventory (name, CAS, location, amount). Labels without a tag fall back to reading the CAS number.
 **Find mode** helps you locate a specific chemical on the shelf.
 
@@ -19,8 +19,9 @@ Nothing is uploaded and there is no backend or analytics.
 
 ## Find a chemical
 Tap the 🔍 button, type a chemical name, CAS number or tag number, and pick the match. The page tells you how many
-containers you have and where to look first. Then pan across the shelf: when a matching bottle's tag (or CAS text) is
-seen, you get a green FOUND banner with its location and a beep, and scanning pauses. **Keep looking** finds the next
+containers you have and where to look first. Then tap **Start scanning** and pan across the shelf: when a matching
+bottle's tag (or CAS text) is seen, scanning stops, the camera freezes on the bottle, and you get confetti, a fanfare and
+a green FOUND banner with its location. **Keep looking** finds the next
 container; **Done** ends the search. The inventory CSV is needed to search by name.
 
 ## Full-screen on your phone
