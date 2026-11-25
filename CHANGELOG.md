@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.0 — 2026-11-25
+Scan modes: choose how much work the phone does.
+- Three buttons at the bottom of the screen (your choice is remembered):
+  - **⚡ Fast** reads tags only. No text reader is loaded at all, so it is the fastest and coolest mode, but a
+    bottle without a tag is not read.
+  - **⚖ Balanced** (default) reads tags first. One text reader runs only when no lab tag has been read for about a
+    second and a half, so tags get the whole processor and untagged labels are still picked up.
+  - **🔎 CAS** reads printed CAS text all the time with two readers, plus tags. Slowest, most thorough.
+- Switching modes starts or stops the text readers on the spot (they are shut down to free memory when not needed).
+- When searching in Fast mode, the "Looking for" card warns that a bottle with no tag will not be found.
+- The "OCR … ms" chip shows a dash when no text reader is running. The old "CAS text reader" checkbox and
+  "workers" setting are replaced by the modes.
+
 ## 1.3.0 — 2026-11-25
 Faster tag scanning, with the same field of view.
 - **Scanning starts the moment the camera does.** The CAS text reader used to load first, delaying tag scanning by

@@ -3,7 +3,7 @@
 A phone-camera web app for scanning chemical bottles hands-free. It identifies a bottle by its
 **institution barcode tag** or by the **CAS number** printed on the label.
 
-**Version 1.3.0.** Point the camera at a bottle: its tag is read in a fraction of a second and
+**Version 1.4.0.** Point the camera at a bottle: its tag is read in a fraction of a second and
 looked up in your lab's inventory (name, CAS, location, amount). Labels without a tag fall back to reading the CAS number.
 **Find mode** helps you locate a specific chemical on the shelf.
 
@@ -16,6 +16,13 @@ the roadmap, [CHANGELOG.md](CHANGELOG.md) for what changed, and [MILESTONE0.md](
 Everything runs on your device. The camera feed is processed in the browser by
 [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) (barcodes) and [Tesseract.js](https://github.com/naptha/tesseract.js) (text).
 Nothing is uploaded and there is no backend or analytics.
+
+## Scan modes
+Three buttons at the bottom of the screen set how much work the phone does:
+**⚡ Fast** (tags only, fastest and coolest, but cannot read a bottle without a tag),
+**⚖ Balanced** (tags first; reads the printed CAS only when no tag is in view; the default) and
+**🔎 CAS** (reads printed CAS text all the time plus tags; slowest, most thorough).
+Your choice is remembered.
 
 ## Find a chemical
 Tap the 🔍 button, type a chemical name, CAS number or tag number, and pick the match. The page tells you how many
