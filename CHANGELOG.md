@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0 — 2026-11-25
+Faster tag scanning, with the same field of view.
+- **Scanning starts the moment the camera does.** The CAS text reader used to load first, delaying tag scanning by
+  seconds; it now loads in the background and joins in when ready.
+- **Lab tag formats only by default** (Code 128, Code 39, ITF, Codabar, Code 93). On the test photos this is about 4x faster
+  (59 ms -> 15 ms per 1920 px frame) with the same lab-tag recall. Vendor QR / Data Matrix codes are an opt-in setting
+  ("Also read vendor QR / Data Matrix codes"), since they cost about 2.5x more and nothing uses them yet.
+- **Full camera resolution, no downscaling.** Shrinking frames loses tags (1440 px read 5 of 8, 960 px read 1), so frames
+  are decoded as the camera delivers them. The 4K camera setting is now a trial for reading smaller or farther tags.
+- **Decoding follows the camera's frames** (requestVideoFrameCallback, never waiting more than 30 ms) instead of a
+  tight loop that could decode the same picture twice.
+
 ## 1.2.0 — 2026-11-25
 Celebration when Find reaches its goal.
 - Enter the CAS you are looking for first; the start button then reads "Start scanning". Scan shelves; the moment a

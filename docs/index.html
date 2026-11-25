@@ -155,6 +155,7 @@
       <label class="chk"><input type="checkbox" id="useOcr" checked> CAS text reader (backup)</label>
       <label class="chk"><input type="checkbox" id="useCrop"> Read CAS only inside a box</label>
       <label class="chk"><input type="checkbox" id="useBlur" checked> Skip blurry frames</label>
+      <label class="chk"><input type="checkbox" id="useVendor"> Also read vendor QR / Data Matrix codes (slower)</label>
     </div>
     <h2>Lab inventory</h2>
     <div class="row">
@@ -164,7 +165,7 @@
     <h2>Tuning</h2>
     <div class="row">
       <label>Camera
-        <select id="camRes"><option value="1280x720">720p</option><option value="1920x1080" selected>1080p</option><option value="3840x2160">4K</option></select></label>
+        <select id="camRes"><option value="1280x720">720p</option><option value="1920x1080" selected>1080p</option><option value="3840x2160">4K (trial: reads smaller/farther tags, slower)</option></select></label>
       <label>CAS reader zoom
         <select id="ocrScale"><option value="1">×1</option><option value="1.5" selected>×1.5</option><option value="2">×2</option></select></label>
       <label>CAS reader workers
@@ -176,7 +177,7 @@
       <button class="sm" id="reset">Reset list</button>
       <button class="sm" id="copy">Copy log</button>
     </div>
-    <div id="build" data-build="v1.2.0 2026-11-25 16:42Z">Scooba Scan</div>
+    <div id="build" data-build="v1.3.0 2026-11-25 17:01Z">Scooba Scan</div>
   </div>
 
   <div id="findPanel">
@@ -278,15 +279,32 @@ ZXingWASM.prepareZXingModule({
 });
 const bcanvas = document.createElement('canvas');
 const bctx = bcanvas.getContext('2d', { willReadFrequently: true });
-const BARCODE_LONG_SIDE = 1920;
+// Lab tags are 1D codes, which are cheap to search for (all five together cost ~2 ms extra). Vendor 2D codes
+// (QR, Data Matrix) are about 2.5x slower to search for and nothing uses them yet, so they are opt-in.
+const TAG_FORMATS = ['Code128', 'Code39', 'ITF', 'Codabar', 'Code93'];
+const VENDOR_FORMATS = ['QRCode', 'DataMatrix'];
 
 async function decodeBarcodes() {
-  const scale = Math.min(1, BARCODE_LONG_SIDE / Math.max(video.videoWidth, video.videoHeight));
-  bcanvas.width = Math.round(video.videoWidth * scale);
-  bcanvas.height = Math.round(video.videoHeight * scale);
-  bctx.drawImage(video, 0, 0, bcanvas.width, bcanvas.height);
+  // Decode at the camera's own resolution: shrinking the frame loses tags (measured: 1440 px read 5 of 8, 960 px read 1).
+  // Choose 4K in settings to read smaller or farther tags.
+  if (bcanvas.width !== video.videoWidth || bcanvas.height !== video.videoHeight) { bcanvas.width = video.videoWidth; bcanvas.height = video.videoHeight; }
+  bctx.drawImage(video, 0, 0);
   const img = bctx.getImageData(0, 0, bcanvas.width, bcanvas.height);
-  return ZXingWASM.readBarcodes(img, { tryHarder: true, maxNumberOfSymbols: 8 });
+  const formats = $('useVendor').checked ? [...TAG_FORMATS, ...VENDOR_FORMATS] : TAG_FORMATS;
+  return ZXingWASM.readBarcodes(img, { tryHarder: true, maxNumberOfSymbols: 8, formats });
+}
+
+// Resolves on the camera's next new frame, so decoding lines up with fresh pictures instead of repeating the last one.
+// It never waits longer than 30 ms: if the browser does not deliver frame callbacks (or the camera is frozen),
+// the loop still polls about 30 times a second rather than stalling.
+function nextFrame() {
+  return new Promise((resolve) => {
+    if (!video.requestVideoFrameCallback) { setTimeout(resolve, 16); return; }
+    let done = false, timer = 0, id = 0;
+    const finish = () => { if (!done) { done = true; clearTimeout(timer); resolve(); } };
+    id = video.requestVideoFrameCallback(finish);
+    timer = setTimeout(() => { video.cancelVideoFrameCallback(id); finish(); }, 30);
+  });
 }
 
 async function barcodeLoop() {
@@ -300,7 +318,7 @@ async function barcodeLoop() {
       } catch (e) { status('Barcode error: ' + (e && e.message || e)); await new Promise((r) => setTimeout(r, 1000)); }
       barTimes.push(performance.now()); while (barTimes.length > 20) barTimes.shift();
     }
-    await new Promise((r) => setTimeout(r, 0)); // yield to the browser (and OCR callbacks)
+    await nextFrame(); // wait for a fresh camera frame (also yields to the browser and the OCR callbacks)
   }
 }
 
@@ -436,14 +454,9 @@ setInterval(() => {
   $('s-skip').textContent = skipped;
 }, 500);
 
-// ---- wiring -----------------------------------------------------------------
-$('start').addEventListener('click', async () => {
-  unlockAudio(); // sounds need a tap to be allowed on iPhone
-  $('start').disabled = true; status('Starting camera…');
+// The CAS text reader is only a backup for labels without a tag, so it must never delay tag scanning.
+async function loadOcrWorkers(scanMsg) {
   try {
-    await startCamera();
-    nWorkers = Number($('workers').value);
-    status(`Loading OCR engine ×${nWorkers} (first time takes a few seconds)…`);
     for (let i = 0; i < nWorkers; i++) {
       const w = await Tesseract.createWorker('eng', 1, {
         workerPath: abs('vendor/tesseract/worker.min.js'),
@@ -454,12 +467,27 @@ $('start').addEventListener('click', async () => {
       });
       await w.setParameters({ tessedit_pageseg_mode: $('psm').value });
       workers.push(w);
+      ocrLane(w, document.createElement('canvas')); // start reading as soon as this worker is ready
     }
+    if ($('status').textContent.includes('text reader loading')) status(scanMsg);
+  } catch (e) {
+    status('Text reader unavailable (' + (e && e.message || e) + '). Tag scanning still works.');
+  }
+}
+
+// ---- wiring -----------------------------------------------------------------
+$('start').addEventListener('click', async () => {
+  unlockAudio(); // sounds need a tap to be allowed on iPhone
+  $('start').disabled = true; status('Starting camera…');
+  try {
+    await startCamera();
+    nWorkers = Number($('workers').value);
     $('start').style.display = 'none';
     running = true; t0 = performance.now();
-    status(target ? 'Scanning for ' + target.label + '…' : 'Scanning. Hold a bottle in view, tag or label facing the camera.');
-    barcodeLoop();
-    workers.forEach((w) => ocrLane(w, document.createElement('canvas')));
+    const scanMsg = target ? 'Scanning for ' + target.label + '…' : 'Scanning. Hold a bottle in view, tag or label facing the camera.';
+    status(scanMsg + ' (text reader loading…)');
+    barcodeLoop();            // tags are read right away...
+    loadOcrWorkers(scanMsg);  // ...while the CAS text reader loads in the background and joins in when ready
   } catch (e) {
     $('start').disabled = false; status('Error: ' + (e && e.message || e));
   }
@@ -475,7 +503,7 @@ $('reset').addEventListener('click', () => { detections.clear(); log.length = 0;
 $('copy').addEventListener('click', async () => {
   const h = hud();
   const text = JSON.stringify({ build: BUILD, ua: navigator.userAgent, camera: $('s-cam').textContent,
-    settings: { zoom: $('ocrScale').value, workers: nWorkers, psm: $('psm').value, boxOnly: $('useCrop').checked, skipBlurry: $('useBlur').checked },
+    settings: { zoom: $('ocrScale').value, workers: nWorkers, psm: $('psm').value, boxOnly: $('useCrop').checked, skipBlurry: $('useBlur').checked, vendorCodes: $('useVendor').checked },
     speed: { barcodeFps: h.bfps, barcodeMsPerFrame: h.bMs, ocrMsAvgLatency: h.ocrMs, ocrFramesPerSec: h.ocrFps, skippedBlurry: skipped },
     inventoryContainers: inventory ? inventory.size : 0, // inventory contents are never included in the log
     detections: [...detections.values()].map((d) => { const i = describe(d); return { ...d, inInventory: i ? !i.unknown : null }; }), ocrFrames: log.slice(-60) }, null, 1);

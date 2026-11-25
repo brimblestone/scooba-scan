@@ -73,3 +73,14 @@ Camera fills the screen; barcodes are read from the whole frame. The latest read
 inventory details; settings sit behind a gear. The CAS text reader is a whole-frame backup by default (no box, no zoom,
 since zooming a whole frame was ~4x slower); the box is now an optional setting. Added a web manifest, app icons and
 iOS meta tags so "Add to Home Screen" launches without browser toolbars.
+
+## Barcode speed experiments (offline, `tools/barcode-bench.mjs`, 38 photos, laptop CPU; relative numbers)
+| Setting | ms/frame (1920 px) | Lab tags read |
+|---|---|---|
+| All formats, tryHarder (v1.2) | 59 | 8 |
+| Code 128 only | 15 | 8 |
+| Code 128 only, tryHarder off | 7 | 4 |
+| Code 128 + QR + Data Matrix | 39 | 8 |
+| Code 128 only at full 3024 px | 33 | 9 |
+Adding Code 39, ITF, Codabar and Code 93 costs ~2 ms. Downscaling loses tags: 1440 px read 5, 1280 px read 4, 960 px read 1
+(of 8 at 1920 px). tryHarder off halves recall. v1.3.0 uses lab tag formats only, full camera resolution, tryHarder on.
