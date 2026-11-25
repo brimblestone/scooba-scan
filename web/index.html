@@ -72,7 +72,10 @@
   #build { color:var(--dim); font-size:11px; margin-top:auto; }
 
   /* Find mode */
-  #findBtn { flex:none; width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:rgba(11,15,20,.72); color:var(--text); font-size:18px; backdrop-filter:blur(6px); }
+  /* A full-width search bar under the stats, so Find is impossible to miss. */
+  #findBtn { position:absolute; left:8px; right:8px; top:calc(var(--top) + 56px); height:48px; display:flex; align-items:center; gap:10px; padding:0 14px; text-align:left; border-radius:14px; border:1px solid var(--bar); background:rgba(11,15,20,.82); color:var(--text); font-size:16px; backdrop-filter:blur(8px); }
+  #findBtn .ico { font-size:18px; }
+  #findBtn #findLabel { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #findBtn.on { border-color:var(--ok); box-shadow:0 0 0 2px rgba(61,220,151,.35); }
   #targetCard { display:none; margin:0 12px 8px; padding:10px 12px; border:1px solid var(--ok); border-radius:12px; background:rgba(61,220,151,.08); }
   #targetCard.show { display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:start; }
@@ -87,7 +90,7 @@
   #findResults button { width:100%; text-align:left; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:12px; padding:12px; display:grid; gap:2px; font-size:14px; }
   #findResults .n { font-weight:600; font-size:16px; }
   #findResults small { color:var(--dim); font-size:13px; }
-  #found { display:none; position:absolute; left:12px; right:12px; top:calc(var(--top) + 60px); padding:14px 16px; border-radius:16px; background:rgba(14,60,40,.96); border:2px solid var(--ok); box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  #found { display:none; position:absolute; left:12px; right:12px; top:calc(var(--top) + 112px); padding:14px 16px; border-radius:16px; background:rgba(14,60,40,.96); border:2px solid var(--ok); box-shadow:0 8px 30px rgba(0,0,0,.5); }
   #found.show { display:grid; gap:4px; }
   #found .big { font-size:26px; font-weight:800; color:var(--ok); }
   #found .nm { font-size:19px; font-weight:600; }
@@ -111,9 +114,9 @@
       <span class="chip">inventory <b id="s-inv">none</b></span>
       <span class="chip" hidden>cam <b id="s-cam">–</b> · <b id="s-ofps">–</b> OCR fps · skipped <b id="s-skip">0</b></span>
     </div>
-    <button id="findBtn" aria-label="Find a chemical">🔍</button>
     <button id="gear" aria-label="Settings">⚙︎</button>
   </div>
+  <button id="findBtn" type="button"><span class="ico">🔍</span><span id="findLabel">Find a chemical — name or CAS</span></button>
   <button id="start">Start camera</button>
 
   <div id="found">
@@ -167,7 +170,7 @@
 
   <div id="findPanel">
     <div class="row" style="flex-wrap:nowrap">
-      <input id="findInput" type="search" placeholder="Name, CAS or tag number" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <input id="findInput" type="search" placeholder="Name or CAS (hyphens optional)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
       <button class="sm" id="closeFind">Cancel</button>
     </div>
     <div id="findHint"></div>
@@ -495,6 +498,7 @@ function setTarget(t) {
   detections.clear(); render();
   $('stage').classList.remove('found'); $('found').classList.remove('show');
   $('findBtn').classList.toggle('on', !!t);
+  $('findLabel').textContent = t ? 'Looking for: ' + t.label : 'Find a chemical — name or CAS';
   $('targetCard').classList.toggle('show', !!t);
   if (t) {
     $('tgtName').textContent = 'Looking for: ' + t.label;
@@ -539,17 +543,34 @@ function openFind() {
   unlockAudio();
   $('findPanel').classList.add('open');
   $('findInput').value = ''; $('findResults').textContent = '';
-  $('findHint').textContent = inventory ? 'Type a chemical name, CAS number or tag number.' : 'Load your inventory (gear) to search by name. You can still type a full CAS number.';
+  $('findHint').textContent = inventory ? 'Type a chemical name or CAS number. Hyphens are optional.' : 'Load your inventory (gear) to search by name. You can still type a full CAS number.';
   setTimeout(() => $('findInput').focus(), 60);
 }
 const closeFind = () => $('findPanel').classList.remove('open');
+// "67641", "67 64 1" or "67-64-1" (also with typographic dashes) -> "67-64-1" if it is a valid CAS, else ''.
+function asCas(q) {
+  const t = q.replace(/[‐-―−]/g, '-').trim();
+  if (isValidCas(t)) return t;
+  const d = t.replace(/[\s.-]/g, '');
+  if (/^[1-9][0-9]{4,9}$/.test(d)) {
+    const c = d.slice(0, -3) + '-' + d.slice(-3, -1) + '-' + d.slice(-1);
+    if (isValidCas(c)) return c;
+  }
+  return '';
+}
 function renderFindResults() {
   const q = $('findInput').value.trim();
   const ul = $('findResults'); ul.textContent = '';
   let results = inventory ? inventory.search(q, 8) : [];
-  if (isValidCas(q) && !results.some((r) => r.cas === q)) results = [{ kind: 'chemical', label: 'CAS ' + q, cas: q, containers: [] }, ...results];
-  if (q.length >= 2 && !results.length) $('findHint').textContent = 'No match. Check the spelling, or type a full CAS number.';
-  else $('findHint').textContent = inventory ? 'Type a chemical name, CAS number or tag number.' : 'Load your inventory (gear) to search by name. You can still type a full CAS number.';
+  const typed = asCas(q); // a full, valid CAS typed with or without hyphens, even if it is not in the inventory
+  if (typed && !results.some((r) => r.cas === typed)) results = [{ kind: 'chemical', label: 'CAS ' + typed, cas: typed, containers: [] }, ...results];
+  const numeric = /^[0-9\s.‐-―−-]+$/.test(q) ? q.replace(/\D/g, '') : '';
+  if (q.length >= 2 && !results.length) {
+    $('findHint').textContent = numeric.length >= 5 && numeric.length <= 10
+      ? 'That is not a valid CAS number (its check digit fails). Check for a typo.'
+      : 'No match. Check the spelling, or type a full CAS number.';
+  }
+  else $('findHint').textContent = inventory ? 'Type a chemical name or CAS number. Hyphens are optional.' : 'Load your inventory (gear) to search by name. You can still type a full CAS number.';
   for (const r of results) {
     const li = document.createElement('li'), b = document.createElement('button');
     const n = document.createElement('span'); n.className = 'n'; n.textContent = r.label;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 — 2026-11-25
+Find mode fixes from phone testing.
+- The tiny 🔍 icon is replaced by a full-width "Find a chemical — name or CAS" search bar under the stats. While you
+  are searching it reads "Looking for: …"; tap it to change the target.
+- A CAS typed **without hyphens** now works (`67641` finds 67-64-1). The iPhone number pad has no hyphen key. Spaces,
+  dots and typographic dashes from iOS smart punctuation are accepted too, and partial CAS numbers still list every match.
+- A valid CAS that is not in the inventory can still be searched for; a mistyped one explains that its check digit fails.
+
 ## 1.1.0 — 2026-11-25
 Find mode.
 - New 🔍 button: search the inventory by chemical name, CAS number (full or partial) or tag number, and pick what to

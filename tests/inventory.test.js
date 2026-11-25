@@ -106,3 +106,26 @@ test('search: respects the limit', () => {
   for (let i = 0; i < 30; i++) rows.push(`Widget ${i},,${String(i).padStart(10, '0')}`);
   assert.equal(Inventory.fromCsv(rows.join('\n')).search('widget', 5).length, 5);
 });
+
+// ---- CAS typed without hyphens (the iPhone number pad has no hyphen key) ----
+test('search: a CAS typed without hyphens finds it', () => {
+  const inv = Inventory.fromCsv(FIND_CSV);
+  assert.equal(inv.search('67641')[0].cas, '67-64-1');          // full CAS, digits only
+  assert.equal(inv.search('6764')[0].cas, '67-64-1');           // partial, digits only
+  assert.equal(inv.search('141786')[0].cas, '141-78-6');
+  assert.equal(inv.search('7647145')[0].cas, '7647-14-5');
+});
+
+test('search: spaces, dots and typographic dashes in a CAS', () => {
+  const inv = Inventory.fromCsv(FIND_CSV);
+  assert.equal(inv.search('67 64 1')[0].cas, '67-64-1');
+  assert.equal(inv.search('67\u201364\u20131')[0].cas, '67-64-1');  // en dashes from iOS smart punctuation
+  assert.equal(inv.search('67\u201464\u20141')[0].cas, '67-64-1');  // em dashes
+});
+
+test('search: digits still find a tag, and short or unknown digits do not misfire', () => {
+  const inv = Inventory.fromCsv(FIND_CSV);
+  assert.equal(inv.search('0000000004')[0].kind, 'tag');
+  assert.deepEqual(inv.search('99999'), []);
+  assert.deepEqual(inv.search('67'), []);                       // two digits, no hyphen: too vague to be a CAS
+});

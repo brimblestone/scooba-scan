@@ -52,22 +52,30 @@ export class Inventory {
    *   { kind: 'chemical'|'tag', label, cas, tag?, containers, score }  (lower score = better match)
    */
   search(query, limit = 8) {
-    const q = String(query ?? '').trim().toLowerCase();
+    // iOS can turn "-" into a typographic dash, so normalise those first.
+    const q = String(query ?? '').trim().toLowerCase().replace(/[‐-―−]/g, '-');
     if (q.length < 2) return [];
     const out = [];
 
+    // Only digits (with optional hyphens, spaces, dots): a CAS typed with or without hyphens, or a tag number.
+    // The iPhone number pad has no hyphen key, so "67641" must find 67-64-1.
+    const digits = /^[\d\s.-]+$/.test(q) ? q.replace(/\D/g, '') : '';
+
     // A tag number: exact match on one container.
-    if (/^\d{3,11}$/.test(q)) {
-      for (const c of this.lookupTag(q)) out.push({ kind: 'tag', label: c.name || c.cas || c.id, cas: c.cas, tag: c.id, containers: [c], score: -1 });
+    if (digits.length >= 3 && digits.length <= 11) {
+      for (const c of this.lookupTag(digits)) out.push({ kind: 'tag', label: c.name || c.cas || c.id, cas: c.cas, tag: c.id, containers: [c], score: -1 });
     }
 
-    const casLike = /^\d{2,7}(-\d{0,2}(-\d?)?)?$/.test(q) && q.includes('-');
+    // CAS prefix on the digits alone (hyphens ignored). Two digits are enough if the user typed a hyphen.
+    const casDigits = digits.length >= 3 || (digits.length >= 2 && q.includes('-')) ? digits : '';
     const tokens = q.split(/\s+/).filter(Boolean);
     const groups = new Map();
     for (const c of this.all) {
       let score = null;
-      if (casLike) { if (c.cas && c.cas.startsWith(q)) score = c.cas === q ? 0 : 1; }
-      else {
+      if (casDigits) {
+        const cd = c.cas.replace(/\D/g, '');
+        if (c.cas && cd.startsWith(casDigits)) score = cd === casDigits ? 0 : 1;
+      } else {
         const name = c.name.toLowerCase();
         if (tokens.every((t) => name.includes(t))) {
           score = name.startsWith(q) ? 0 : tokens.every((t) => name.startsWith(t) || name.includes(' ' + t) || name.includes('-' + t) || name.includes('(' + t)) ? 1 : 2;
