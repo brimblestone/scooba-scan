@@ -1,0 +1,25 @@
+# Milestone 0 — Scanner spike: results
+
+Test set: 38 phone photos (`test-data/private/`, git-ignored), 31 with a legible CAS, 7 with none visible.
+Answer key `expected.json` was read by hand from the photos; every entry passes the CAS checksum.
+
+## Offline accuracy (Tesseract.js 7, laptop CPU, `npm run harness -- --size N --psm P`)
+
+| Image long side | Mode | Single-CAS recall (exact only) | + fuzzy hyphen repair | Median / p90 per frame | False-positive photos |
+|---|---|---|---|---|---|
+| 1600 | auto (3) | – | 20% | 0.27 s / 0.5 s | 0/38 |
+| 1920 | sparse (11) | 27% | 50% | 0.75 s / 1.4 s | 1/38 |
+| 3024 (native) | auto (3) | – | 37% | 0.7 s / 1.2 s | 0/38 |
+| 3024 (native) | sparse (11) | 53% | 67% | 1.0 s / 1.7 s | 0/38 |
+| 3024 + 6-tile 1.5x fallback | sparse (11) | 60% | 77% | 3.3 s / 6.5 s | 0/38 |
+
+The 7 photos with no visible CAS were all correctly reported as "nothing found" in every run.
+
+## Findings
+- **Pixels per glyph decide everything.** Label text is small in a full-bottle frame; recall roughly triples from 1600 px to native.
+- **Many misses were fixable in the parser, not the OCR:** dropped hyphens (`104-949`), `T`/`S`/`B` read for digits. `src/cas.js` now has a *fuzzy* tier for these, tagged so the UI can treat it as lower confidence.
+- **Checksum blind spot:** a lost leading *even* digit still passes (`617-94-7` → `17-94-7`), because that digit's weight is 5. Find mode should compare against the full target; Bulk Add should flag unusually short prefixes.
+- Remaining misses: tiny/rusty print, text cut off at a label edge, handwriting, glare, text split across lines.
+
+## Not yet measured
+Live speed and accuracy **on the iPhone**. Run `npm run serve`, open the printed `https://<laptop-ip>:8443/` on the phone, accept the certificate warning, tap Start, and use **Copy log** to capture numbers.
