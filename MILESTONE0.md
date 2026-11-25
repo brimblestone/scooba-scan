@@ -23,3 +23,25 @@ The 7 photos with no visible CAS were all correctly reported as "nothing found" 
 
 ## Not yet measured
 Live speed and accuracy **on the iPhone**. Run `npm run serve`, open the printed `https://<laptop-ip>:8443/` on the phone, accept the certificate warning, tap Start, and use **Copy log** to capture numbers.
+
+## First iPhone test (build v0.1.0, iPhone Safari, 1080x1920 full frame, sparse mode)
+- OCR latency per frame: median 0.66 s (p90 0.91 s), about 1.4 frames/s.
+- Reads that appeared were correct on the bottles checked, but it took roughly 7 frames (~5 s) per bottle:
+  only ~8-14% of frames produced a result, and some frames were wasted aiming at nothing.
+- Verdict: accurate but too slow to beat reading the CAS by eye.
+
+## Speed experiments (offline, 1920 px frames, `--crop` / `--upscale` / `--whitelist` in the harness)
+| Variant | Recall (incl. fuzzy) | Exact only | Median ms |
+|---|---|---|---|
+| Full frame | 50% | 27% | 460 |
+| Center box 100% x 50% | 47% | 30% | 330 |
+| Box + digits-only character whitelist | 30% | 23% | 350 |
+| Box + 1.5x enlarge | 60% | 50% | 650 |
+| Box 100% x 35% | 50% | 33% | 420 |
+
+Cropping to a box is ~30% faster at similar recall; enlarging the box is the best accuracy lever;
+a digits-only whitelist hurts, so it is not used.
+
+## Build v0.2.0 changes (dev)
+On-screen reticle box, OCR on the box only with 1.5x zoom, 2 parallel OCR workers, skip-blurry-frames filter,
+and more speed fields in Copy log. Not yet measured on the phone.

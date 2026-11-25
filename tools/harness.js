@@ -16,13 +16,24 @@ const psm = String(args.psm || 3);
 const expected = JSON.parse(await readFile(path.join(dir, 'expected.json'), 'utf8'));
 
 const worker = await createWorker('eng');
-await worker.setParameters({ tessedit_pageseg_mode: psm });
+await worker.setParameters({ tessedit_pageseg_mode: psm, ...(args.whitelist ? { tessedit_char_whitelist: '0123456789-CAS:NoRN.' } : {}) });
+// --crop W,H : centered crop as fractions of the (resized) frame, simulating an on-screen reticle.
+// --upscale K : enlarge the crop K times before OCR.
+const crop = args.crop ? String(args.crop).split(',').map(Number) : null;
+const upscale = Number(args.upscale || 1);
 
 const rows = [];
 for (const [file, { cas, note }] of Object.entries(expected)) {
   let img = sharp(path.join(dir, file)).rotate().resize({ width: size, height: size, fit: 'inside', withoutEnlargement: true });
   if (args.gray) img = img.grayscale().normalize();
-  const buf = await img.jpeg({ quality: 90 }).toBuffer();
+  let buf = await img.jpeg({ quality: 90 }).toBuffer();
+  if (crop) {
+    const m = await sharp(buf).metadata();
+    const w = Math.round(m.width * crop[0]), h = Math.round(m.height * crop[1]);
+    let c = sharp(buf).extract({ left: Math.round((m.width - w) / 2), top: Math.round((m.height - h) / 2), width: w, height: h });
+    if (upscale !== 1) c = c.resize({ width: Math.round(w * upscale) });
+    buf = await c.jpeg({ quality: 90 }).toBuffer();
+  }
   const t0 = performance.now();
   const { data } = await worker.recognize(buf);
   const ms0 = performance.now() - t0;

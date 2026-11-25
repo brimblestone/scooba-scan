@@ -14,6 +14,8 @@
   #hud { position:absolute; left:8px; top:8px; right:8px; display:flex; gap:6px; flex-wrap:wrap; pointer-events:none; }
   .chip { background:rgba(11,15,20,.78); border:1px solid var(--line); border-radius:8px; padding:3px 8px; font-variant-numeric:tabular-nums; }
   .chip b { color:var(--bar); font-weight:600; }
+  #reticle { position:absolute; left:4%; right:4%; top:32%; height:34%; border:2px dashed rgba(255,255,255,.85); border-radius:10px; box-shadow:0 0 0 9999px rgba(0,0,0,.35); pointer-events:none; }
+  #reticle span { position:absolute; left:8px; bottom:-26px; font-size:12px; color:#fff; text-shadow:0 1px 3px #000; }
   #flash { position:absolute; inset:0; border:4px solid var(--ok); opacity:0; transition:opacity .5s; pointer-events:none; }
   #flash.on { opacity:1; transition:none; }
   #start { position:absolute; inset:0; margin:auto; width:200px; height:56px; font-size:17px; font-weight:600; border:0; border-radius:12px; background:var(--bar); color:#04111f; }
@@ -36,11 +38,13 @@
 <body>
 <div id="stage">
   <video id="video" playsinline muted autoplay></video>
+  <div id="reticle"><span>Line the CAS number up inside the box</span></div>
   <div id="flash"></div>
   <div id="hud">
     <span class="chip">cam <b id="s-cam">–</b></span>
     <span class="chip">barcode <b id="s-bfps">–</b> fps</span>
     <span class="chip">OCR <b id="s-oms">–</b> ms · <b id="s-ofps">–</b> fps</span>
+    <span class="chip">skipped <b id="s-skip">0</b></span>
   </div>
   <button id="start">Start camera</button>
 </div>
@@ -48,24 +52,28 @@
   <div class="row">
     <label>Camera
       <select id="camRes"><option value="1280x720">720p</option><option value="1920x1080" selected>1080p</option><option value="3840x2160">4K</option></select></label>
-    <label>OCR image long side
-      <select id="ocrSize"><option value="1280">1280</option><option value="1920" selected>1920</option><option value="2560">2560</option><option value="0">native</option></select></label>
+    <label>OCR zoom
+      <select id="ocrScale"><option value="1">×1</option><option value="1.5" selected>×1.5</option><option value="2">×2</option></select></label>
+    <label>OCR workers
+      <select id="workers"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
     <label>OCR mode
       <select id="psm"><option value="11" selected>sparse (11)</option><option value="6">block (6)</option><option value="3">auto (3)</option></select></label>
   </div>
   <div class="row">
     <label class="chk"><input type="checkbox" id="useBar" checked> Barcode</label>
     <label class="chk"><input type="checkbox" id="useOcr" checked> OCR</label>
+    <label class="chk"><input type="checkbox" id="useCrop" checked> Box only</label>
+    <label class="chk"><input type="checkbox" id="useBlur" checked> Skip blurry</label>
     <button class="sm" id="reset">Reset list</button>
     <button class="sm" id="copy">Copy log</button>
   </div>
-  <div id="status">Idle. Tap “Start camera”.</div>
+  <div id="status">Idle. Tap “Start camera”. Worker count applies at start.</div>
   <section>
     <h2>Detections</h2>
     <ul id="dets"></ul>
     <div id="empty">Nothing yet. Point at a bottle label or barcode tag.</div>
   </section>
-  <footer id="build" data-build="v0.1.0 2026-11-25 02:24Z" style="color:var(--dim);font-size:11px">Scooba Scan prototype</footer>
+  <footer id="build" data-build="v0.2.0 2026-11-25 02:39Z" style="color:var(--dim);font-size:11px">Scooba Scan prototype</footer>
 </main>
 
 <script src="./vendor/zxing/index.min.js"></script>
@@ -82,7 +90,7 @@ const status = (t) => ($('status').textContent = t);
 const BUILD = $('build').dataset.build.startsWith('__') ? 'dev' : $('build').dataset.build;
 $('build').textContent = `Scooba Scan prototype · build ${BUILD}`;
 
-let stream = null, worker = null, running = false, t0 = 0;
+let stream = null, workers = [], running = false, t0 = 0, skipped = 0, nWorkers = 2;
 const detections = new Map(); // key -> {kind, value, tier, count, firstMs, lastMs}
 const barTimes = [], ocrTimes = [];
 const log = []; // every OCR/barcode event, for "Copy log"
@@ -135,31 +143,66 @@ async function barcodeLoop() {
   }
 }
 
-// ---- OCR (Tesseract.js) -----------------------------------------------------
-const ocanvas = document.createElement('canvas');
-const octx = ocanvas.getContext('2d', { willReadFrequently: true });
-
-function grabForOcr() {
-  const long = Number($('ocrSize').value) || Math.max(video.videoWidth, video.videoHeight);
-  const scale = Math.min(1, long / Math.max(video.videoWidth, video.videoHeight));
-  ocanvas.width = Math.round(video.videoWidth * scale);
-  ocanvas.height = Math.round(video.videoHeight * scale);
-  octx.drawImage(video, 0, 0, ocanvas.width, ocanvas.height);
-  return ocanvas;
+// ---- OCR region + sharpness --------------------------------------------------
+// Where the on-screen reticle sits, in video-pixel coordinates (the video is shown with object-fit: cover).
+function reticleRect() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!$('useCrop').checked) return { x: 0, y: 0, w: vw, h: vh };
+  const stage = $('stage'), r = $('reticle');
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const scale = Math.max(sw / vw, sh / vh);
+  const offX = (vw * scale - sw) / 2, offY = (vh * scale - sh) / 2;
+  const x = Math.max(0, (r.offsetLeft + offX) / scale), y = Math.max(0, (r.offsetTop + offY) / scale);
+  return { x, y, w: Math.min(vw - x, r.offsetWidth / scale), h: Math.min(vh - y, r.offsetHeight / scale) };
 }
 
-async function ocrLoop() {
+const tiny = document.createElement('canvas');
+const tctx = tiny.getContext('2d', { willReadFrequently: true });
+const sharpHist = [];
+// Variance of a Laplacian on a small grayscale copy: higher = sharper.
+function sharpness(src, sx, sy, sw, sh) {
+  tiny.width = 160; tiny.height = Math.max(8, Math.round(160 * sh / sw));
+  tctx.drawImage(src, sx, sy, sw, sh, 0, 0, tiny.width, tiny.height);
+  const { data, width, height } = tctx.getImageData(0, 0, tiny.width, tiny.height);
+  const g = new Float32Array(width * height);
+  for (let i = 0; i < g.length; i++) g[i] = data[i * 4] * 0.3 + data[i * 4 + 1] * 0.59 + data[i * 4 + 2] * 0.11;
+  let sum = 0, sum2 = 0, n = 0;
+  for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
+    const i = y * width + x, l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - width] - g[i + width];
+    sum += l; sum2 += l * l; n++;
+  }
+  return sum2 / n - (sum / n) ** 2;
+}
+let blurStreak = 0;
+function tooBlurry(s) {
+  sharpHist.push(s); while (sharpHist.length > 40) sharpHist.shift();
+  if (!$('useBlur').checked || sharpHist.length < 8) return false;
+  const sorted = [...sharpHist].sort((a, b) => a - b);
+  const typicalSharp = sorted[Math.floor(sorted.length * 0.8)];
+  if (s < 0.45 * typicalSharp && blurStreak < 5) { blurStreak++; return true; } // never starve: force a frame every 6th
+  blurStreak = 0; return false;
+}
+
+// ---- OCR (Tesseract.js), several workers in parallel -------------------------
+async function ocrLane(worker, canvas) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   let lastPsm = $('psm').value;
   while (running) {
     if (!$('useOcr').checked || video.readyState < 2) { await new Promise((r) => setTimeout(r, 200)); continue; }
+    const rect = reticleRect();
+    const s = sharpness(video, rect.x, rect.y, rect.w, rect.h);
+    if (tooBlurry(s)) { skipped++; await new Promise((r) => setTimeout(r, 30)); continue; }
     if ($('psm').value !== lastPsm) { lastPsm = $('psm').value; await worker.setParameters({ tessedit_pageseg_mode: lastPsm }); }
-    const img = grabForOcr();
+    const zoom = Number($('ocrScale').value);
+    const outW = Math.min(2600, Math.round(rect.w * zoom));
+    canvas.width = outW; canvas.height = Math.round(outW * rect.h / rect.w);
+    ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h, 0, 0, canvas.width, canvas.height);
     const t = performance.now();
-    const { data } = await worker.recognize(img);
+    const { data } = await worker.recognize(canvas);
     const ms = performance.now() - t;
-    ocrTimes.push({ at: performance.now(), ms }); while (ocrTimes.length > 10) ocrTimes.shift();
+    ocrTimes.push({ at: performance.now(), ms }); while (ocrTimes.length > 12) ocrTimes.shift();
     const found = extractCas(data.text);
-    log.push({ t: Math.round(performance.now() - t0), ms: Math.round(ms), size: `${img.width}x${img.height}`, cas: found.map((f) => `${f.cas}${f.tier === 'fuzzy' ? '?' : ''}`) });
+    log.push({ t: Math.round(performance.now() - t0), ms: Math.round(ms), size: `${canvas.width}x${canvas.height}`, sharp: Math.round(s), cas: found.map((f) => `${f.cas}${f.tier === 'fuzzy' ? '?' : ''}`) });
     for (const f of found) record('cas', f.cas, f.tier, ms);
   }
 }
@@ -199,13 +242,16 @@ function fps(times) {
   if (times.length < 2) return '–';
   return ((times.length - 1) / ((times.at(-1) - times[0]) / 1000)).toFixed(1);
 }
+const hud = () => ({
+  bfps: fps(barTimes),
+  ocrMs: ocrTimes.length ? Math.round(ocrTimes.reduce((s, x) => s + x.ms, 0) / ocrTimes.length) : null,
+  ocrFps: fps(ocrTimes.map((x) => x.at)),
+});
 setInterval(() => {
-  $('s-bfps').textContent = running && $('useBar').checked ? fps(barTimes) : '–';
-  if (ocrTimes.length) {
-    const avg = ocrTimes.reduce((s, x) => s + x.ms, 0) / ocrTimes.length;
-    $('s-oms').textContent = Math.round(avg);
-    $('s-ofps').textContent = fps(ocrTimes.map((x) => x.at));
-  }
+  const h = hud();
+  $('s-bfps').textContent = running && $('useBar').checked ? h.bfps : '–';
+  if (h.ocrMs !== null) { $('s-oms').textContent = h.ocrMs; $('s-ofps').textContent = h.ocrFps; }
+  $('s-skip').textContent = skipped;
 }, 500);
 
 // ---- wiring -----------------------------------------------------------------
@@ -213,27 +259,35 @@ $('start').addEventListener('click', async () => {
   $('start').disabled = true; status('Starting camera…');
   try {
     await startCamera();
-    status('Loading OCR engine (first time takes a few seconds)…');
-    worker = await Tesseract.createWorker('eng', 1, {
-      workerPath: abs('vendor/tesseract/worker.min.js'),
-      corePath: abs('vendor/tesseract-core/'),
-      langPath: abs('vendor/lang/'),
-      gzip: false,
-      logger: () => {},
-    });
-    await worker.setParameters({ tessedit_pageseg_mode: $('psm').value });
+    nWorkers = Number($('workers').value);
+    status(`Loading OCR engine ×${nWorkers} (first time takes a few seconds)…`);
+    for (let i = 0; i < nWorkers; i++) {
+      const w = await Tesseract.createWorker('eng', 1, {
+        workerPath: abs('vendor/tesseract/worker.min.js'),
+        corePath: abs('vendor/tesseract-core/'),
+        langPath: abs('vendor/lang/'),
+        gzip: false,
+        logger: () => {},
+      });
+      await w.setParameters({ tessedit_pageseg_mode: $('psm').value });
+      workers.push(w);
+    }
     $('start').style.display = 'none';
     running = true; t0 = performance.now();
-    status('Scanning. Hold the label steady, 15–30 cm away.');
-    barcodeLoop(); ocrLoop();
+    status('Scanning. Put the CAS number inside the box, 15–30 cm away.');
+    barcodeLoop();
+    workers.forEach((w) => ocrLane(w, document.createElement('canvas')));
   } catch (e) {
     $('start').disabled = false; status('Error: ' + (e && e.message || e));
   }
 });
 $('camRes').addEventListener('change', async () => { if (stream) { await startCamera(); } });
-$('reset').addEventListener('click', () => { detections.clear(); log.length = 0; t0 = performance.now(); render(); });
+$('reset').addEventListener('click', () => { detections.clear(); log.length = 0; skipped = 0; t0 = performance.now(); render(); });
 $('copy').addEventListener('click', async () => {
-  const text = JSON.stringify({ build: BUILD, ua: navigator.userAgent, camera: $('s-cam').textContent, ocrSize: $('ocrSize').value, psm: $('psm').value,
+  const h = hud();
+  const text = JSON.stringify({ build: BUILD, ua: navigator.userAgent, camera: $('s-cam').textContent,
+    settings: { zoom: $('ocrScale').value, workers: nWorkers, psm: $('psm').value, boxOnly: $('useCrop').checked, skipBlurry: $('useBlur').checked },
+    speed: { barcodeFps: h.bfps, ocrMsAvgLatency: h.ocrMs, ocrFramesPerSec: h.ocrFps, skippedBlurry: skipped },
     detections: [...detections.values()], ocrFrames: log.slice(-60) }, null, 1);
   try { await navigator.clipboard.writeText(text); status('Log copied.'); } catch { status('Copy blocked by browser.'); }
 });
