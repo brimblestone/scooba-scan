@@ -3,14 +3,17 @@
 A phone-camera web app for scanning chemical bottles hands-free. It identifies a bottle by its
 **institution barcode tag** or by the **CAS number** printed on the label.
 
-**Status: early prototype (Milestone 0, scanner spike).** Find and Bulk Add modes are not built yet.
-See [PLAN.md](PLAN.md) for the design and [MILESTONE0.md](MILESTONE0.md) for current accuracy results.
+**Version 1.0.0, first release.** Point the camera at a bottle: its tag is read in a fraction of a second and
+looked up in your lab's inventory (name, CAS, location, amount). Labels without a tag fall back to reading the CAS number.
+
+**Not built yet:** Find mode (search for one chemical), Bulk Add / CSV export and shelf audit. See [PLAN.md](PLAN.md) for
+the roadmap, [CHANGELOG.md](CHANGELOG.md) for what changed, and [MILESTONE0.md](MILESTONE0.md) for measured speed and accuracy.
 
 **Try it:** https://brimblestone.github.io/scooba-scan/ (iPhone Safari or Android Chrome, camera access required)
 
 ## Privacy
 Everything runs on your device. The camera feed is processed in the browser by
-[ZXing](https://github.com/zxing-js/library) (barcodes) and [Tesseract.js](https://github.com/naptha/tesseract.js) (text).
+[zxing-wasm](https://github.com/Sec-ant/zxing-wasm) (barcodes) and [Tesseract.js](https://github.com/naptha/tesseract.js) (text).
 Nothing is uploaded and there is no backend or analytics.
 
 ## Full-screen on your phone

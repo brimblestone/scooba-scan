@@ -125,7 +125,7 @@
       <button class="sm" id="reset">Reset list</button>
       <button class="sm" id="copy">Copy log</button>
     </div>
-    <div id="build" data-build="v0.5.0 2026-11-25 03:25Z">Scooba Scan prototype</div>
+    <div id="build" data-build="v1.0.0 2026-11-25 03:45Z">Scooba Scan</div>
   </div>
 </div>
 
@@ -142,7 +142,7 @@ const video = $('video');
 const status = (t) => ($('status').textContent = t);
 // Stamped by `npm run build`; the dev server leaves the placeholder, shown as "dev".
 const BUILD = $('build').dataset.build.startsWith('__') ? 'dev' : $('build').dataset.build;
-$('build').textContent = `Scooba Scan prototype · build ${BUILD}`;
+$('build').textContent = `Scooba Scan · build ${BUILD}`;
 
 // ---- lab inventory (stays on this device: kept in memory and in this browser's IndexedDB) ----
 let inventory = null;

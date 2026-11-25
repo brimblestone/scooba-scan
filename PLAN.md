@@ -2,7 +2,10 @@
 
 A phone-camera web app that scans chemical bottles hands-free, identifying them by **institution inventory barcode** or **CAS number**.
 
-Status: design settled (2026-11-24), implementation not started.
+Status: v1.0.0 released (2026-11-25): full-screen scanner with barcode + inventory lookup and a CAS-text backup.
+Still to build: Find mode, Bulk Add + CSV export, audit mode (see sections 4-5). Milestone 0 results are in MILESTONE0.md.
+Design change since the original plan: the lab's own inventory export (tag -> CAS/name/location) is now the primary lookup,
+because barcode reads are far faster and more reliable than OCR.
 
 ---
 
