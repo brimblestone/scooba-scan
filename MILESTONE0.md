@@ -45,3 +45,14 @@ a digits-only whitelist hurts, so it is not used.
 ## Build v0.2.0 changes (dev)
 On-screen reticle box, OCR on the box only with 1.5x zoom, 2 parallel OCR workers, skip-blurry-frames filter,
 and more speed fields in Copy log. Not yet measured on the phone.
+
+## Second iPhone test (v0.2.0) and the barcode discovery
+- Box + zoom + 2 workers: a little faster but still ~seconds per bottle; a smaller box was slower to focus.
+- **No barcode was read at all in the phone test.** Offline test over the 38 photos confirmed it: the pure-JS
+  `@zxing/library` decoded 0/38, even on a clean crop of a Code 128 tag.
+- Replacing it with `zxing-wasm` (zxing-cpp compiled to WebAssembly) fixed this. At 1920 px it decodes 13/38 photos
+  (median 83 ms); at full 3024 px 14/38 (median 220 ms). Of the 11 photos showing a full institution tag
+  (10-digit `0000xxxxxx`, Code 128), 8 decode at 1920 px and 9 at full size; misses are small, oblique or curved tags.
+  It also reads vendor Data Matrix / QR codes (Merck/Sigma GS1, Fisher URL) and older 6-digit lab labels.
+- Build v0.3.0 uses zxing-wasm for barcodes. Barcode decoding ran at ~17 fps in the laptop browser test.
+- Next: look tags up in the lab's own inventory export so a tag read gives the CAS/name instantly.

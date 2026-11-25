@@ -76,7 +76,7 @@
   <footer id="build" data-build="__BUILD__" style="color:var(--dim);font-size:11px">Scooba Scan prototype</footer>
 </main>
 
-<script src="./vendor/zxing/index.min.js"></script>
+<script src="./vendor/zxing-wasm/iife/reader/index.js"></script>
 <script src="./vendor/tesseract/tesseract.min.js"></script>
 <script type="module">
 import { extractCas } from './src/cas.js';
@@ -92,7 +92,7 @@ $('build').textContent = `Scooba Scan prototype · build ${BUILD}`;
 
 let stream = null, workers = [], running = false, t0 = 0, skipped = 0, nWorkers = 2;
 const detections = new Map(); // key -> {kind, value, tier, count, firstMs, lastMs}
-const barTimes = [], ocrTimes = [];
+const barTimes = [], barMs = [], ocrTimes = [];
 const log = []; // every OCR/barcode event, for "Copy log"
 
 // ---- camera ---------------------------------------------------------------
@@ -108,36 +108,35 @@ async function startCamera() {
   $('s-cam').textContent = `${video.videoWidth}×${video.videoHeight}`;
 }
 
-// ---- barcode (ZXing) --------------------------------------------------------
-const zx = (() => {
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  const reader = new ZXing.MultiFormatReader();
-  reader.setHints(hints);
-  return reader;
-})();
+// ---- barcode (zxing-cpp compiled to WebAssembly) ------------------------------
+// The older pure-JS ZXing port could not read the lab's Code 128 tags; zxing-cpp can.
+ZXingWASM.prepareZXingModule({
+  overrides: { locateFile: (p, prefix) => (p.endsWith('.wasm') ? abs('vendor/zxing-wasm/reader/zxing_reader.wasm') : prefix + p) },
+  fireImmediately: true,
+});
 const bcanvas = document.createElement('canvas');
 const bctx = bcanvas.getContext('2d', { willReadFrequently: true });
+const BARCODE_LONG_SIDE = 1920;
 
-function decodeBarcode() {
-  const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+async function decodeBarcodes() {
+  const scale = Math.min(1, BARCODE_LONG_SIDE / Math.max(video.videoWidth, video.videoHeight));
   bcanvas.width = Math.round(video.videoWidth * scale);
   bcanvas.height = Math.round(video.videoHeight * scale);
   bctx.drawImage(video, 0, 0, bcanvas.width, bcanvas.height);
-  const source = new ZXing.HTMLCanvasElementLuminanceSource(bcanvas);
-  try {
-    const r = zx.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source)));
-    return { text: r.getText(), format: ZXing.BarcodeFormat[r.getBarcodeFormat()] };
-  } catch { return null; }
+  const img = bctx.getImageData(0, 0, bcanvas.width, bcanvas.height);
+  return ZXingWASM.readBarcodes(img, { tryHarder: true, maxNumberOfSymbols: 8 });
 }
 
 async function barcodeLoop() {
   while (running) {
     if ($('useBar').checked && video.readyState >= 2) {
       const t = performance.now();
-      const hit = decodeBarcode();
+      try {
+        const hits = await decodeBarcodes();
+        barMs.push(performance.now() - t); while (barMs.length > 20) barMs.shift();
+        for (const h of hits) record('barcode', h.text, h.format, performance.now() - t);
+      } catch (e) { status('Barcode error: ' + (e && e.message || e)); await new Promise((r) => setTimeout(r, 1000)); }
       barTimes.push(performance.now()); while (barTimes.length > 20) barTimes.shift();
-      if (hit) record('barcode', hit.text, hit.format, performance.now() - t);
     }
     await new Promise((r) => setTimeout(r, 0)); // yield to the browser (and OCR callbacks)
   }
@@ -244,6 +243,7 @@ function fps(times) {
 }
 const hud = () => ({
   bfps: fps(barTimes),
+  bMs: barMs.length ? Math.round(barMs.reduce((x, y) => x + y, 0) / barMs.length) : null,
   ocrMs: ocrTimes.length ? Math.round(ocrTimes.reduce((s, x) => s + x.ms, 0) / ocrTimes.length) : null,
   ocrFps: fps(ocrTimes.map((x) => x.at)),
 });
@@ -287,7 +287,7 @@ $('copy').addEventListener('click', async () => {
   const h = hud();
   const text = JSON.stringify({ build: BUILD, ua: navigator.userAgent, camera: $('s-cam').textContent,
     settings: { zoom: $('ocrScale').value, workers: nWorkers, psm: $('psm').value, boxOnly: $('useCrop').checked, skipBlurry: $('useBlur').checked },
-    speed: { barcodeFps: h.bfps, ocrMsAvgLatency: h.ocrMs, ocrFramesPerSec: h.ocrFps, skippedBlurry: skipped },
+    speed: { barcodeFps: h.bfps, barcodeMsPerFrame: h.bMs, ocrMsAvgLatency: h.ocrMs, ocrFramesPerSec: h.ocrFps, skippedBlurry: skipped },
     detections: [...detections.values()], ocrFrames: log.slice(-60) }, null, 1);
   try { await navigator.clipboard.writeText(text); status('Log copied.'); } catch { status('Copy blocked by browser.'); }
 });

@@ -32,7 +32,7 @@ if (!existsSync(certFile) || !existsSync(sanFile) || readFileSync(sanFile, 'utf8
 const mounts = [
   ['/vendor/tesseract/', 'node_modules/tesseract.js/dist/'],
   ['/vendor/tesseract-core/', 'node_modules/tesseract.js-core/'],
-  ['/vendor/zxing/', 'node_modules/@zxing/library/umd/'],
+  ['/vendor/zxing-wasm/', 'node_modules/zxing-wasm/dist/'],
   ['/vendor/lang/', '.'], // eng.traineddata lives in the project root (downloaded on first harness run)
   ['/src/', 'src/'],
   ['/', 'web/'],

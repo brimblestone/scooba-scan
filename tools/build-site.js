@@ -13,7 +13,8 @@ const copy = (from, to) => {
 const core = 'node_modules/tesseract.js-core/';
 copy('web/index.html', 'index.html');
 copy('src/cas.js', 'src/cas.js');
-copy('node_modules/@zxing/library/umd/index.min.js', 'vendor/zxing/index.min.js');
+copy('node_modules/zxing-wasm/dist/iife/reader/index.js', 'vendor/zxing-wasm/iife/reader/index.js');
+copy('node_modules/zxing-wasm/dist/reader/zxing_reader.wasm', 'vendor/zxing-wasm/reader/zxing_reader.wasm');
 copy('node_modules/tesseract.js/dist/tesseract.min.js', 'vendor/tesseract/tesseract.min.js');
 copy('node_modules/tesseract.js/dist/worker.min.js', 'vendor/tesseract/worker.min.js');
 for (const f of ['tesseract-core-lstm.wasm.js', 'tesseract-core-simd-lstm.wasm.js', 'tesseract-core-relaxedsimd-lstm.wasm.js']) copy(core + f, 'vendor/tesseract-core/' + f);
