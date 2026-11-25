@@ -1,0 +1,31 @@
+# Scooba Scan
+
+A phone-camera web app for scanning chemical bottles hands-free. It identifies a bottle by its
+**institution barcode tag** or by the **CAS number** printed on the label.
+
+**Status: early prototype (Milestone 0, scanner spike).** Find and Bulk Add modes are not built yet.
+See [PLAN.md](PLAN.md) for the design and [MILESTONE0.md](MILESTONE0.md) for current accuracy results.
+
+**Try it:** https://brimblestone.github.io/scooba-scan/ (iPhone Safari or Android Chrome, camera access required)
+
+## Privacy
+Everything runs on your device. The camera feed is processed in the browser by
+[ZXing](https://github.com/zxing-js/library) (barcodes) and [Tesseract.js](https://github.com/naptha/tesseract.js) (text).
+Nothing is uploaded and there is no backend or analytics.
+
+## Giving feedback during testing
+Tap **Copy log** on the page and paste it into your report, along with your phone model and the build
+shown at the bottom of the page. Please do **not** share photos of labels that show institution tags.
+
+## Development
+```
+npm install
+npm test            # unit tests for CAS extraction + checksum
+npm run harness     # OCR accuracy over test-data/private (needs your own photos + expected.json)
+npm run serve       # local dev server (https for a phone on the same network, http://localhost:8080 on this machine)
+npm run build       # builds docs/ for GitHub Pages
+```
+Test photos live in `test-data/private/` and are git-ignored.
+
+## License
+[MIT](LICENSE)

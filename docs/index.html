@@ -65,6 +65,7 @@
     <ul id="dets"></ul>
     <div id="empty">Nothing yet. Point at a bottle label or barcode tag.</div>
   </section>
+  <footer id="build" data-build="v0.1.0 2026-11-25 02:24Z" style="color:var(--dim);font-size:11px">Scooba Scan prototype</footer>
 </main>
 
 <script src="./vendor/zxing/index.min.js"></script>
@@ -77,6 +78,9 @@ const abs = (p) => new URL(p, location.href).href;
 const $ = (id) => document.getElementById(id);
 const video = $('video');
 const status = (t) => ($('status').textContent = t);
+// Stamped by `npm run build`; the dev server leaves the placeholder, shown as "dev".
+const BUILD = $('build').dataset.build.startsWith('__') ? 'dev' : $('build').dataset.build;
+$('build').textContent = `Scooba Scan prototype · build ${BUILD}`;
 
 let stream = null, worker = null, running = false, t0 = 0;
 const detections = new Map(); // key -> {kind, value, tier, count, firstMs, lastMs}
@@ -229,7 +233,7 @@ $('start').addEventListener('click', async () => {
 $('camRes').addEventListener('change', async () => { if (stream) { await startCamera(); } });
 $('reset').addEventListener('click', () => { detections.clear(); log.length = 0; t0 = performance.now(); render(); });
 $('copy').addEventListener('click', async () => {
-  const text = JSON.stringify({ ua: navigator.userAgent, camera: $('s-cam').textContent, ocrSize: $('ocrSize').value, psm: $('psm').value,
+  const text = JSON.stringify({ build: BUILD, ua: navigator.userAgent, camera: $('s-cam').textContent, ocrSize: $('ocrSize').value, psm: $('psm').value,
     detections: [...detections.values()], ocrFrames: log.slice(-60) }, null, 1);
   try { await navigator.clipboard.writeText(text); status('Log copied.'); } catch { status('Copy blocked by browser.'); }
 });

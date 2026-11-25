@@ -1,6 +1,6 @@
 // Builds the static site in docs/ for GitHub Pages: page + cas.js + the vendored OCR/barcode libraries.
 // Usage: npm run build
-import { mkdirSync, copyFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, copyFileSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 const out = 'docs';
@@ -18,5 +18,11 @@ copy('node_modules/tesseract.js/dist/tesseract.min.js', 'vendor/tesseract/tesser
 copy('node_modules/tesseract.js/dist/worker.min.js', 'vendor/tesseract/worker.min.js');
 for (const f of ['tesseract-core-lstm.wasm.js', 'tesseract-core-simd-lstm.wasm.js', 'tesseract-core-relaxedsimd-lstm.wasm.js']) copy(core + f, 'vendor/tesseract-core/' + f);
 copy('eng.traineddata', 'vendor/lang/eng.traineddata');
+// Stamp the build so test reports can say which version they used.
+const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+const stamp = `v${version} ${new Date().toISOString().slice(0, 16).replace('T', ' ')}Z`;
+const indexPath = path.join(out, 'index.html');
+writeFileSync(indexPath, readFileSync(indexPath, 'utf8').replace('__BUILD__', stamp));
+console.log('Stamped build', stamp);
 writeFileSync(path.join(out, '.nojekyll'), '');
 console.log('Built docs/ — commit and push it, then enable Pages from the /docs folder.');
