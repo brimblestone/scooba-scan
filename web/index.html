@@ -70,6 +70,33 @@
   .filebtn input { display:none; }
   #closePanel { align-self:flex-end; }
   #build { color:var(--dim); font-size:11px; margin-top:auto; }
+
+  /* Find mode */
+  #findBtn { flex:none; width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:rgba(11,15,20,.72); color:var(--text); font-size:18px; backdrop-filter:blur(6px); }
+  #findBtn.on { border-color:var(--ok); box-shadow:0 0 0 2px rgba(61,220,151,.35); }
+  #targetCard { display:none; margin:0 12px 8px; padding:10px 12px; border:1px solid var(--ok); border-radius:12px; background:rgba(61,220,151,.08); }
+  #targetCard.show { display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:start; }
+  #targetCard .t1 { font-weight:600; font-size:16px; }
+  #targetCard .t2 { color:var(--dim); font-size:13px; grid-column:1/-1; }
+  #targetCard button { grid-row:1; grid-column:2; background:none; border:0; color:var(--dim); font-size:22px; padding:0 4px; }
+  #findPanel { position:absolute; inset:0; display:none; flex-direction:column; gap:10px; padding:calc(var(--top) + 14px) 16px calc(var(--bottom) + 16px); background:rgba(11,15,20,.97); }
+  #findPanel.open { display:flex; }
+  #findInput { flex:1; min-width:0; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:12px; font-size:17px; }
+  #findHint { color:var(--dim); font-size:13px; }
+  #findResults { list-style:none; margin:0; padding:0; display:grid; gap:8px; overflow-y:auto; }
+  #findResults button { width:100%; text-align:left; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:12px; padding:12px; display:grid; gap:2px; font-size:14px; }
+  #findResults .n { font-weight:600; font-size:16px; }
+  #findResults small { color:var(--dim); font-size:13px; }
+  #found { display:none; position:absolute; left:12px; right:12px; top:calc(var(--top) + 60px); padding:14px 16px; border-radius:16px; background:rgba(14,60,40,.96); border:2px solid var(--ok); box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  #found.show { display:grid; gap:4px; }
+  #found .big { font-size:26px; font-weight:800; color:var(--ok); }
+  #found .nm { font-size:19px; font-weight:600; }
+  #found .wh { font-size:15px; }
+  #found .ot { font-size:13px; color:#bfe9d4; }
+  #found .row { margin-top:8px; }
+  #found button { background:var(--ok); color:#04111f; border:0; border-radius:10px; padding:11px 16px; font-size:15px; font-weight:700; }
+  #found button.alt { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:600; }
+  #stage.found #flash { opacity:1; transition:none; }
 </style>
 </head>
 <body>
@@ -84,12 +111,22 @@
       <span class="chip">inventory <b id="s-inv">none</b></span>
       <span class="chip" hidden>cam <b id="s-cam">–</b> · <b id="s-ofps">–</b> OCR fps · skipped <b id="s-skip">0</b></span>
     </div>
+    <button id="findBtn" aria-label="Find a chemical">🔍</button>
     <button id="gear" aria-label="Settings">⚙︎</button>
   </div>
   <button id="start">Start camera</button>
 
+  <div id="found">
+    <div class="big">✓ FOUND</div>
+    <div class="nm" id="foundName"></div>
+    <div class="wh" id="foundWhere"></div>
+    <div class="ot" id="foundOthers"></div>
+    <div class="row"><button id="keepLooking">Keep looking</button><button class="alt" id="doneFind">Done</button></div>
+  </div>
+
   <div id="sheet">
     <div id="sheetHead"><span id="status">Idle. Tap “Start camera”.</span><span id="count"></span></div>
+    <div id="targetCard"><span class="t1" id="tgtName"></span><button id="tgtClear" aria-label="Stop looking">✕</button><span class="t2" id="tgtInfo"></span></div>
     <div id="list">
       <ul id="dets"></ul>
       <div id="empty">Nothing yet. Point the camera at a bottle's barcode tag or label.</div>
@@ -127,13 +164,22 @@
     </div>
     <div id="build" data-build="__BUILD__">Scooba Scan</div>
   </div>
+
+  <div id="findPanel">
+    <div class="row" style="flex-wrap:nowrap">
+      <input id="findInput" type="search" placeholder="Name, CAS or tag number" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <button class="sm" id="closeFind">Cancel</button>
+    </div>
+    <div id="findHint"></div>
+    <ul id="findResults"></ul>
+  </div>
 </div>
 
 <script src="./vendor/zxing-wasm/iife/reader/index.js"></script>
 <script src="./vendor/tesseract/tesseract.min.js"></script>
 <script type="module">
-import { extractCas } from './src/cas.js';
-import { Inventory } from './src/inventory.js';
+import { extractCas, isValidCas } from './src/cas.js';
+import { Inventory, normTag } from './src/inventory.js';
 
 // Absolute URLs (relative to this page) so it works from a subfolder like user.github.io/repo/
 const abs = (p) => new URL(p, location.href).href;
@@ -231,7 +277,7 @@ async function decodeBarcodes() {
 
 async function barcodeLoop() {
   while (running) {
-    if ($('useBar').checked && video.readyState >= 2) {
+    if (!scanPaused && $('useBar').checked && video.readyState >= 2) {
       const t = performance.now();
       try {
         const hits = await decodeBarcodes();
@@ -289,7 +335,7 @@ async function ocrLane(worker, canvas) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   let lastPsm = $('psm').value;
   while (running) {
-    if (!$('useOcr').checked || video.readyState < 2) { await new Promise((r) => setTimeout(r, 200)); continue; }
+    if (scanPaused || !$('useOcr').checked || video.readyState < 2) { await new Promise((r) => setTimeout(r, 200)); continue; }
     const rect = reticleRect();
     const s = sharpness(video, rect.x, rect.y, rect.w, rect.h);
     if (tooBlurry(s)) { skipped++; await new Promise((r) => setTimeout(r, 30)); continue; }
@@ -311,6 +357,7 @@ async function ocrLane(worker, canvas) {
 
 // ---- detections list + HUD ---------------------------------------------------
 function record(kind, value, sub, ms) {
+  if (target && !scanPaused) { const m = evalMatch(kind, value); if (m) onFound(m, kind, value); }
   const key = `${kind}:${value}`;
   const now = Math.round(performance.now() - t0);
   const d = detections.get(key);
@@ -377,6 +424,7 @@ setInterval(() => {
 
 // ---- wiring -----------------------------------------------------------------
 $('start').addEventListener('click', async () => {
+  unlockAudio(); // sounds need a tap to be allowed on iPhone
   $('start').disabled = true; status('Starting camera…');
   try {
     await startCamera();
@@ -395,7 +443,7 @@ $('start').addEventListener('click', async () => {
     }
     $('start').style.display = 'none';
     running = true; t0 = performance.now();
-    status('Scanning. Hold a bottle in view, tag or label facing the camera.');
+    status(target ? 'Scanning for ' + target.label + '…' : 'Scanning. Hold a bottle in view, tag or label facing the camera.');
     barcodeLoop();
     workers.forEach((w) => ocrLane(w, document.createElement('canvas')));
   } catch (e) {
@@ -419,6 +467,112 @@ $('copy').addEventListener('click', async () => {
     detections: [...detections.values()].map((d) => { const i = describe(d); return { ...d, inInventory: i ? !i.unknown : null }; }), ocrFrames: log.slice(-60) }, null, 1);
   try { await navigator.clipboard.writeText(text); status('Log copied.'); } catch { status('Copy blocked by browser.'); }
 });
+// ---- Find mode -------------------------------------------------------------------
+// Pick a chemical (by name, CAS or tag), then scan until a bottle that matches is seen.
+let target = null;       // { label, casLabel, cas: Set, tags: Set, containers: [] }
+let scanPaused = false;  // true after a match, until "Keep looking"
+let seenTags = new Set(); // tags already found for this target, skipped after "Keep looking" so the same bottle isn't re-found
+let casQuietUntil = 0;    // after a find by CAS text, ignore further CAS-text matches for a few seconds
+let actx = null;
+const unlockAudio = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch {} };
+function beep() {
+  try {
+    unlockAudio();
+    [880, 1320].forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(actx.destination);
+      const t = actx.currentTime + i * 0.15;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+      o.start(t); o.stop(t + 0.15);
+    });
+  } catch {}
+}
+const whereOf = (cs, n = 3) => [...new Set(cs.map((c) => c.where).filter(Boolean))].slice(0, n).join(' | ');
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+
+function setTarget(t) {
+  target = t; scanPaused = false; seenTags = new Set(); casQuietUntil = 0;
+  detections.clear(); render();
+  $('stage').classList.remove('found'); $('found').classList.remove('show');
+  $('findBtn').classList.toggle('on', !!t);
+  $('targetCard').classList.toggle('show', !!t);
+  if (t) {
+    $('tgtName').textContent = 'Looking for: ' + t.label;
+    const n = t.containers.length;
+    $('tgtInfo').textContent = [t.casLabel, n ? plural(n, 'container') + ' in inventory' : '', whereOf(t.containers) && 'Try: ' + whereOf(t.containers)].filter(Boolean).join(' · ');
+    status(running ? 'Scanning for ' + t.label + '…' : 'Tap “Start camera” to begin looking.');
+  } else {
+    status(running ? 'Scanning. Hold a bottle in view, tag or label facing the camera.' : 'Idle. Tap “Start camera”.');
+  }
+}
+const targetFromResult = (r) => ({ label: r.label, casLabel: r.cas || '', cas: new Set(r.cas ? [r.cas] : []), tags: new Set(r.kind === 'tag' ? [normTag(r.tag)] : []), containers: r.containers });
+
+// Does this read identify the target? Returns { container? } or null.
+function evalMatch(kind, value) {
+  if (kind === 'barcode') {
+    if (seenTags.has(normTag(value))) return null;
+    if (target.tags.has(normTag(value))) return { container: inventory ? inventory.lookupTag(value)[0] : null };
+    const rows = inventory ? inventory.lookupTag(value) : [];
+    const hit = rows.find((c) => c.cas && target.cas.has(c.cas));
+    return hit ? { container: hit } : null;
+  }
+  // A CAS text read must equal the target exactly (repaired "fuzzy" reads are safe to accept because the target is known).
+  return target.cas.has(value) && performance.now() > casQuietUntil ? {} : null;
+}
+
+function onFound(m, kind, value) {
+  if (scanPaused) return;
+  scanPaused = true;
+  if (kind === 'barcode') seenTags.add(normTag(value)); else casQuietUntil = performance.now() + 5000;
+  beep(); if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  const c = m.container;
+  $('foundName').textContent = c ? c.name : target.label;
+  $('foundWhere').textContent = c ? [c.id, c.where, c.amount].filter(Boolean).join(' · ')
+    : 'Matched the CAS text ' + value + (whereOf(target.containers) ? ' · Try: ' + whereOf(target.containers) : '');
+  const others = target.containers.filter((x) => !c || x.id !== c.id);
+  $('foundOthers').textContent = others.length ? plural(others.length, 'other container') + ' with this CAS' + (whereOf(others) ? ': ' + whereOf(others) : '') : '';
+  $('found').classList.add('show'); $('stage').classList.add('found');
+  status('Found it. Tap “Keep looking” for another, or “Done”.');
+}
+
+function openFind() {
+  unlockAudio();
+  $('findPanel').classList.add('open');
+  $('findInput').value = ''; $('findResults').textContent = '';
+  $('findHint').textContent = inventory ? 'Type a chemical name, CAS number or tag number.' : 'Load your inventory (gear) to search by name. You can still type a full CAS number.';
+  setTimeout(() => $('findInput').focus(), 60);
+}
+const closeFind = () => $('findPanel').classList.remove('open');
+function renderFindResults() {
+  const q = $('findInput').value.trim();
+  const ul = $('findResults'); ul.textContent = '';
+  let results = inventory ? inventory.search(q, 8) : [];
+  if (isValidCas(q) && !results.some((r) => r.cas === q)) results = [{ kind: 'chemical', label: 'CAS ' + q, cas: q, containers: [] }, ...results];
+  if (q.length >= 2 && !results.length) $('findHint').textContent = 'No match. Check the spelling, or type a full CAS number.';
+  else $('findHint').textContent = inventory ? 'Type a chemical name, CAS number or tag number.' : 'Load your inventory (gear) to search by name. You can still type a full CAS number.';
+  for (const r of results) {
+    const li = document.createElement('li'), b = document.createElement('button');
+    const n = document.createElement('span'); n.className = 'n'; n.textContent = r.label;
+    const d = document.createElement('small');
+    d.textContent = r.kind === 'tag'
+      ? ['Tag ' + r.tag, r.cas, r.containers[0].where].filter(Boolean).join(' · ')
+      : [r.cas, r.containers.length ? plural(r.containers.length, 'container') : '', whereOf(r.containers, 1)].filter(Boolean).join(' · ');
+    b.append(n, d);
+    b.addEventListener('click', () => { setTarget(targetFromResult(r)); closeFind(); });
+    li.append(b); ul.append(li);
+  }
+}
+$('findBtn').addEventListener('click', openFind);
+$('closeFind').addEventListener('click', closeFind);
+$('findInput').addEventListener('input', renderFindResults);
+$('findInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const first = $('findResults').querySelector('button'); if (first) first.click(); e.preventDefault(); } });
+$('tgtClear').addEventListener('click', () => setTarget(null));
+$('doneFind').addEventListener('click', () => setTarget(null));
+$('keepLooking').addEventListener('click', () => {
+  scanPaused = false; $('found').classList.remove('show'); $('stage').classList.remove('found');
+  status('Scanning for ' + target.label + '…');
+});
+
 // ---- screen controls ----------------------------------------------------------
 $('gear').addEventListener('click', () => $('panel').classList.add('open'));
 $('closePanel').addEventListener('click', () => $('panel').classList.remove('open'));

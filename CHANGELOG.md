@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0 — 2026-11-25
+Find mode.
+- New 🔍 button: search the inventory by chemical name, CAS number (full or partial) or tag number, and pick what to
+  look for. The page shows how many containers you have and where to try first.
+- Scan until a matching bottle is seen: a tag whose inventory record has that CAS, or a CAS text read equal to the target.
+  A big FOUND banner shows that container's tag, location and amount, plus where the other containers with that CAS are.
+  It beeps, vibrates where the phone allows it (not on iPhone), and pauses scanning.
+- "Keep looking" resumes and skips bottles already found; "Done" (or ✕) ends the search.
+- You can pick a target before starting the camera. A CAS number can be typed even without an inventory loaded.
+
 ## 1.0.0 — 2026-11-25
 First release.
 - Full-screen camera with a bottom sheet showing the latest reads; settings behind a gear.

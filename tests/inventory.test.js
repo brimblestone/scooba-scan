@@ -53,3 +53,56 @@ test('toContainer: column names are case-insensitive', () => {
   const c = toContainer({ 'container id': '0000000001', 'cas number': '50-00-0', 'chemical name': 'Formaldehyde' });
   assert.deepEqual([c.id, c.cas, c.name], ['0000000001', '50-00-0', 'Formaldehyde']);
 });
+
+// ---- Find mode search (synthetic data only) ----
+const FIND_CSV = '"Chemical Name","CAS Number","Location (space)",Bench,Shelf,"Container ID"\r\n' +
+  'Acetone,67-64-1,Room 1,B1,S1,0000000001\r\n' +
+  '"Acetone, ACS",67-64-1,Room 2,B2,S2,0000000002\r\n' +
+  'Acetone-d6,666-52-4,Room 1,B1,S3,0000000003\r\n' +
+  'Ethyl acetate,141-78-6,Room 3,B3,S4,0000000004\r\n' +
+  'Sodium chloride,7647-14-5,Room 4,B4,S5,0000000005\r\n' +
+  'No cas thing,,Room 5,B5,S6,0000000006\r\n';
+
+test('search: groups containers by chemical and ranks starts-with first', () => {
+  const inv = Inventory.fromCsv(FIND_CSV);
+  const r = inv.search('acetone');
+  assert.equal(r[0].cas, '67-64-1');
+  assert.equal(r[0].containers.length, 2);
+  assert.equal(r[1].cas, '666-52-4');
+  assert.equal(r.length, 2); // "Ethyl acetate" does not contain "acetone"
+});
+
+test('search: every word must match, any order', () => {
+  const inv = Inventory.fromCsv(FIND_CSV);
+  assert.equal(inv.search('chloride sodium')[0].cas, '7647-14-5');
+  assert.deepEqual(inv.search('sodium zzz'), []);
+});
+
+test('search: CAS prefix and full CAS', () => {
+  const inv = Inventory.fromCsv(FIND_CSV);
+  assert.equal(inv.search('67-64')[0].cas, '67-64-1');
+  assert.equal(inv.search('67-64-1')[0].containers.length, 2);
+  assert.deepEqual(inv.search('99-99'), []);
+});
+
+test('search: tag number, with or without leading zeros', () => {
+  const inv = Inventory.fromCsv(FIND_CSV);
+  const r = inv.search('0000000004');
+  assert.equal(r[0].kind, 'tag');
+  assert.equal(r[0].label, 'Ethyl acetate');
+  assert.equal(inv.search('4')[0] === undefined, true); // too short to search
+  assert.equal(inv.search('000004')[0].tag, '0000000004');
+});
+
+test('search: groups chemicals without a CAS by name; short queries return nothing', () => {
+  const inv = Inventory.fromCsv(FIND_CSV);
+  assert.equal(inv.search('no cas')[0].label, 'No cas thing');
+  assert.deepEqual(inv.search('a'), []);
+  assert.deepEqual(inv.search(''), []);
+});
+
+test('search: respects the limit', () => {
+  const rows = ['"Chemical Name","CAS Number","Container ID"'];
+  for (let i = 0; i < 30; i++) rows.push(`Widget ${i},,${String(i).padStart(10, '0')}`);
+  assert.equal(Inventory.fromCsv(rows.join('\n')).search('widget', 5).length, 5);
+});

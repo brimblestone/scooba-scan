@@ -43,6 +43,44 @@ export class Inventory {
       if (c.cas) (this.byCas.get(c.cas) || this.byCas.set(c.cas, []).get(c.cas)).push(c);
     }
     this.size = containers.length;
+    this.all = containers;
+  }
+
+  /**
+   * Search by name words, CAS (full or prefix) or tag number, for Find mode.
+   * Returns at most `limit` groups, one per chemical (grouped by CAS, or by name when there is no CAS):
+   *   { kind: 'chemical'|'tag', label, cas, tag?, containers, score }  (lower score = better match)
+   */
+  search(query, limit = 8) {
+    const q = String(query ?? '').trim().toLowerCase();
+    if (q.length < 2) return [];
+    const out = [];
+
+    // A tag number: exact match on one container.
+    if (/^\d{3,11}$/.test(q)) {
+      for (const c of this.lookupTag(q)) out.push({ kind: 'tag', label: c.name || c.cas || c.id, cas: c.cas, tag: c.id, containers: [c], score: -1 });
+    }
+
+    const casLike = /^\d{2,7}(-\d{0,2}(-\d?)?)?$/.test(q) && q.includes('-');
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const groups = new Map();
+    for (const c of this.all) {
+      let score = null;
+      if (casLike) { if (c.cas && c.cas.startsWith(q)) score = c.cas === q ? 0 : 1; }
+      else {
+        const name = c.name.toLowerCase();
+        if (tokens.every((t) => name.includes(t))) {
+          score = name.startsWith(q) ? 0 : tokens.every((t) => name.startsWith(t) || name.includes(' ' + t) || name.includes('-' + t) || name.includes('(' + t)) ? 1 : 2;
+        }
+      }
+      if (score === null) continue;
+      const key = c.cas || 'name:' + c.name.toLowerCase();
+      const g = groups.get(key);
+      if (g) { g.containers.push(c); g.score = Math.min(g.score, score); }
+      else groups.set(key, { kind: 'chemical', label: c.name, cas: c.cas, containers: [c], score });
+    }
+    const chem = [...groups.values()].sort((a, b) => a.score - b.score || b.containers.length - a.containers.length || a.label.length - b.label.length);
+    return [...out, ...chem].slice(0, limit);
   }
 
   static fromCsv(text) { return new Inventory(parseCsv(text).map(toContainer)); }

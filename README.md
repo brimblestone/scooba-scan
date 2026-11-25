@@ -3,10 +3,11 @@
 A phone-camera web app for scanning chemical bottles hands-free. It identifies a bottle by its
 **institution barcode tag** or by the **CAS number** printed on the label.
 
-**Version 1.0.0, first release.** Point the camera at a bottle: its tag is read in a fraction of a second and
+**Version 1.1.0.** Point the camera at a bottle: its tag is read in a fraction of a second and
 looked up in your lab's inventory (name, CAS, location, amount). Labels without a tag fall back to reading the CAS number.
+**Find mode** helps you locate a specific chemical on the shelf.
 
-**Not built yet:** Find mode (search for one chemical), Bulk Add / CSV export and shelf audit. See [PLAN.md](PLAN.md) for
+**Not built yet:** Bulk Add / CSV export and shelf audit. See [PLAN.md](PLAN.md) for
 the roadmap, [CHANGELOG.md](CHANGELOG.md) for what changed, and [MILESTONE0.md](MILESTONE0.md) for measured speed and accuracy.
 
 **Try it:** https://brimblestone.github.io/scooba-scan/ (iPhone Safari or Android Chrome, camera access required)
@@ -15,6 +16,12 @@ the roadmap, [CHANGELOG.md](CHANGELOG.md) for what changed, and [MILESTONE0.md](
 Everything runs on your device. The camera feed is processed in the browser by
 [zxing-wasm](https://github.com/Sec-ant/zxing-wasm) (barcodes) and [Tesseract.js](https://github.com/naptha/tesseract.js) (text).
 Nothing is uploaded and there is no backend or analytics.
+
+## Find a chemical
+Tap the 🔍 button, type a chemical name, CAS number or tag number, and pick the match. The page tells you how many
+containers you have and where to look first. Then pan across the shelf: when a matching bottle's tag (or CAS text) is
+seen, you get a green FOUND banner with its location and a beep, and scanning pauses. **Keep looking** finds the next
+container; **Done** ends the search. The inventory CSV is needed to search by name.
 
 ## Full-screen on your phone
 The camera fills the screen and the latest reads appear in a sheet at the bottom (tap its header to see more;
